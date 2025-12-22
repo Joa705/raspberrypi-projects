@@ -10,6 +10,7 @@ from config import settings
 from database.db import init_db
 from routes.camera import router as camera_router
 from routes.module import router as module_router
+from services.health_monitor import health_monitor
 
 logging.basicConfig(
     level=settings.log_level,
@@ -24,8 +25,10 @@ async def lifespan(app: FastAPI):
     logger.info("Starting camera backend...")
     await init_db()
     logger.info("Database initialized")
+    await health_monitor.start()
     yield
     logger.info("Shutting down...")
+    await health_monitor.stop()
 
 
 app = FastAPI(
