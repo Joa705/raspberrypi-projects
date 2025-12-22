@@ -43,8 +43,6 @@ graph LR
 - Uvicorn (ASGI server)
 
 **Key Endpoints:**
-- `POST /api/sensors/{sensor_type}` - Receive sensor data from modules
-- `GET /api/sensors/{sensor_type}` - Retrieve sensor data for frontend
 - `POST /api/camera/frame` - Receive camera frames
 - `GET /api/camera/stream` - Stream camera feed
 - `POST /api/modules/{module_id}/control` - Send commands to modules
@@ -90,16 +88,6 @@ graph LR
 - RPi.GPIO or gpiozero
 - picamera3 or external cameras (for camera modules)
 - requests library (for API communication)
-
-### 4. Shared Utilities
-**Location:** `/shared/`
-
-**Purpose:**
-- Common code used across multiple modules
-- GPIO helper functions
-- Configuration management
-- Message queue utilities
-- Constants and enums
 
 ## Communication Flow
 
