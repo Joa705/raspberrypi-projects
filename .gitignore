@@ -25,4 +25,5 @@ Thumbs.db
 *.tar.gz
 
 docs/_build/
+docs/temp.md
 site/
