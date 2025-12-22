@@ -69,7 +69,7 @@ graph TB
 ### Hardware Modules
 - **Python 3** - Module programming language
 - **RPi.GPIO** / **gpiozero** - GPIO control libraries
-- **picamera2** - Camera interface
+- **Tp-link Tapo** - Camera interface
 - **Requests** - HTTP library for API communication
 
 ### DevOps
@@ -88,14 +88,12 @@ raspberrypi-projects/
 │   ├── .env.example
 │   ├── main.py
 │   ├── config.py
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── routes/
-│   │   │   ├── camera.py
-│   │   │   ├── sensors.py
-│   │   │   └── modules.py
-│   │   └── models/
-│   │       └── schemas.py
+│   ├── routes/
+│   │   ├── camera.py
+│   │   ├── sensors.py
+│   │   └── modules.py
+│   ├── models/
+│   │   └── schemas.py
 │   ├── database/
 │   │   ├── db.py
 │   │   └── models.py
