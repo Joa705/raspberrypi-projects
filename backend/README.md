@@ -1,6 +1,6 @@
 # Camera Backend - Raspberry Pi
 
-Simple FastAPI backend for handling camera frames from Raspberry Pi camera modules.
+Simple FastAPI backend for handling Raspberrypi modules and svelte frontend
 
 ## Project Structure
 
