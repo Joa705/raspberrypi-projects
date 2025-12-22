@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
+from uuid import UUID
 import logging
 
 from database.db import get_db
@@ -51,7 +52,7 @@ async def register_module(
         logger.info(f"Module registered: {data.module_id} (type: {data.module_type})")
         return SuccessResponse(
             message="Module registered successfully",
-            data={"module_id": data.module_id, "id": module.id}
+            data={"module_id": str(data.module_id)}
         )
         
     except HTTPException:
@@ -63,7 +64,7 @@ async def register_module(
 
 @router.put("/{module_id}/status", response_model=SuccessResponse)
 async def update_module_status(
-    module_id: str,
+    module_id: UUID,
     data: ModuleStatusUpdate,
     db: AsyncSession = Depends(get_db)
 ):

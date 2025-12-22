@@ -6,10 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List, Optional
 from datetime import datetime
+from uuid import UUID
 import logging
 
 from database.db import get_db
-from database.models import Camera
+from database.models import Camera, Module
 from models.schemas import CameraRegister, CameraResponse, CameraStatusUpdate, SuccessResponse
 from config import settings
 
@@ -35,11 +36,22 @@ async def register_camera(
                 detail=f"Camera {data.camera_id} already registered"
             )
         
+        # Verify module exists
+        module_query = select(Module).where(Module.module_id == data.module_id)
+        module_result = await db.execute(module_query)
+        module = module_result.scalar_one_or_none()
+        
+        if not module:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Module {data.module_id} not found"
+            )
+        
         # Create new camera
         camera = Camera(
             camera_id=data.camera_id,
             name=data.name,
-            module_id=data.module_id,
+            module_id=data.module_id,  # Use UUID directly
             stream_url=data.stream_url,
             location=data.location,
             resolution=data.resolution,
@@ -53,7 +65,7 @@ async def register_camera(
         logger.info(f"Camera registered: {data.camera_id}")
         return SuccessResponse(
             message="Camera registered successfully",
-            data={"camera_id": data.camera_id, "id": camera.id}
+            data={"camera_id": str(data.camera_id)}
         )
         
     except HTTPException:
@@ -65,7 +77,7 @@ async def register_camera(
 
 @router.get("", response_model=List[CameraResponse])
 async def list_cameras(
-    module_id: Optional[int] = Query(None, description="Filter by module ID"),
+    module_id: Optional[UUID] = Query(None, description="Filter by module UUID"),
     status: Optional[str] = Query(None, description="Filter by status"),
     db: AsyncSession = Depends(get_db)
 ):
@@ -93,7 +105,7 @@ async def list_cameras(
 
 @router.get("/{camera_id}", response_model=CameraResponse)
 async def get_camera(
-    camera_id: str,
+    camera_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
     """Get details for a specific camera."""
@@ -116,7 +128,7 @@ async def get_camera(
 
 @router.put("/{camera_id}/status", response_model=SuccessResponse)
 async def update_camera_status(
-    camera_id: str,
+    camera_id: UUID,
     data: CameraStatusUpdate,
     db: AsyncSession = Depends(get_db)
 ):
@@ -150,7 +162,7 @@ async def update_camera_status(
 
 @router.patch("/{camera_id}", response_model=SuccessResponse)
 async def update_camera(
-    camera_id: str,
+    camera_id: UUID,
     stream_url: Optional[str] = None,
     location: Optional[str] = None,
     resolution: Optional[str] = None,
@@ -193,7 +205,7 @@ async def update_camera(
 
 @router.delete("/{camera_id}", response_model=SuccessResponse)
 async def delete_camera(
-    camera_id: str,
+    camera_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a camera."""

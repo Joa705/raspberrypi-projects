@@ -2,17 +2,18 @@
 Database models for module and camera registration.
 """
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database.db import Base
+import uuid
 
 
 class Module(Base):
     """Model for storing registered modules (camera, sensor, heat, etc.)."""
     __tablename__ = "modules"
     
-    id = Column(Integer, primary_key=True, index=True)
-    module_id = Column(String(100), unique=True, index=True, nullable=False)
+    module_id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     module_type = Column(String(50), nullable=False)  # camera, sensor, heat, etc.
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
@@ -32,10 +33,9 @@ class Camera(Base):
     """Model for storing individual cameras managed by a camera module."""
     __tablename__ = "cameras"
     
-    id = Column(Integer, primary_key=True, index=True)
-    camera_id = Column(String(100), unique=True, index=True, nullable=False)
+    camera_id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     name = Column(String(200), nullable=False)
-    module_id = Column(Integer, ForeignKey("modules.id"), nullable=False)
+    module_id = Column(UUID(as_uuid=True), ForeignKey("modules.module_id"), nullable=False)
     stream_url = Column(String(500), nullable=True)  # Individual camera stream URL
     location = Column(String(200), nullable=True)
     resolution = Column(String(50), nullable=True)  # e.g., "1920x1080"

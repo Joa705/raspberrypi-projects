@@ -4,6 +4,7 @@ Pydantic schemas for module and camera API.
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 
 
 # ============================================================================
@@ -12,7 +13,7 @@ from datetime import datetime
 
 class ModuleRegister(BaseModel):
     """Schema for registering a new module."""
-    module_id: str = Field(..., description="Unique module identifier")
+    module_id: UUID = Field(..., description="Unique module identifier (UUID)")
     module_type: str = Field(..., description="Module type (camera, sensor, heat, etc.)")
     name: str = Field(..., description="Module name")
     description: Optional[str] = Field(None, description="Module description")
@@ -21,8 +22,7 @@ class ModuleRegister(BaseModel):
 
 class ModuleResponse(BaseModel):
     """Schema for module responses."""
-    id: int
-    module_id: str
+    module_id: UUID
     module_type: str
     name: str
     description: Optional[str]
@@ -45,9 +45,9 @@ class ModuleStatusUpdate(BaseModel):
 
 class CameraRegister(BaseModel):
     """Schema for registering a camera."""
-    camera_id: str = Field(..., description="Unique camera identifier")
+    camera_id: UUID = Field(..., description="Unique camera identifier (UUID)")
     name: str = Field(..., description="Camera name")
-    module_id: int = Field(..., description="ID of the module managing this camera")
+    module_id: UUID = Field(..., description="UUID of the module managing this camera")
     stream_url: str = Field(None, description="Camera stream URL")
     location: Optional[str] = Field(None, description="Camera location")
     resolution: Optional[str] = Field(None, description="Resolution (e.g., 1920x1080)")
@@ -55,10 +55,9 @@ class CameraRegister(BaseModel):
 
 class CameraResponse(BaseModel):
     """Schema for camera responses."""
-    id: int
-    camera_id: str
+    camera_id: UUID
     name: str
-    module_id: int
+    module_id: UUID
     stream_url: str
     location: Optional[str]
     resolution: Optional[str]
