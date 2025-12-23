@@ -115,7 +115,8 @@ async def system_info():
     Returns CPU, RAM, disk usage, temperature, uptime, and camera stream status.
     """
     # CPU Information
-    cpu_percent = psutil.cpu_percent(interval=0.5)
+    cpu_per_core = psutil.cpu_percent(interval=1, percpu=True)  # Per-core usage
+    cpu_percent = sum(cpu_per_core) / len(cpu_per_core)  # Calculate average from per-core
     cpu_count = psutil.cpu_count()
     cpu_freq = psutil.cpu_freq()
     load_avg = psutil.getloadavg()
@@ -171,6 +172,7 @@ async def system_info():
         "timestamp": datetime.now().isoformat(),
         "cpu": {
             "usage_percent": round(cpu_percent, 1),
+            "per_core": [round(core, 1) for core in cpu_per_core],
             "cores": cpu_count,
             "frequency_mhz": round(cpu_freq.current, 1) if cpu_freq else None,
             "load_average": {
