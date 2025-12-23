@@ -1,111 +1,98 @@
-# Camera Backend - Raspberry Pi
+# Backend README
 
-Simple FastAPI backend for handling Raspberrypi modules and svelte frontend
+## FastAPI Backend for Raspberry Pi Hardware Control
 
-## Project Structure
+This is a single-process FastAPI backend that runs on a Raspberry Pi and controls hardware modules (camera, heat sensor, light).
+
+### Architecture
 
 ```
 backend/
-├── main.py             # FastAPI application
-├── config.py           # Configuration
-├── requirements.txt    # Dependencies
-├── .env.example        # Environment template
-├── routes/
-│   └── camera.py       # Camera endpoints
-├── models/
-│       └── schemas.py  # Pydantic models
-└── database/
-    ├── db.py           # Database connection
-    └── models.py       # SQLAlchemy models
+├── main.py              # FastAPI application entrypoint
+├── api/                 # HTTP route definitions (no hardware logic)
+│   ├── camera.py        # Camera endpoints
+│   ├── heat.py          # Heat sensor endpoints
+│   └── light.py         # Light control endpoints
+│
+├── modules/             # Hardware control logic (no HTTP knowledge)
+│   ├── camera/
+│   │   ├── controller.py  # High-level camera control
+│   │   └── driver.py      # Low-level camera driver
+│   ├── heat/
+│   │   └── sensor.py      # Temperature/humidity sensor
+│   └── light/
+│       └── relay.py       # Light relay control
 ```
 
-## API Endpoints
-- `/api/modules`
-- `/api/camera`
+### Setup
 
-### System Endpoints
-- `GET /` - API info
-- `GET /health` - Health check
-- `GET /api/docs` - Interactive API documentation
+1. **Install dependencies**:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
 
-## Quick Start
+2. **Run the server**:
+   ```bash
+   python main.py
+   ```
+   
+   Or with uvicorn directly:
+   ```bash
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   ```
 
-### 1. Install Dependencies
+3. **Access the API**:
+   - API: http://localhost:8000
+   - Interactive docs: http://localhost:8000/docs
+   - Alternative docs: http://localhost:8000/redoc
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+### API Endpoints
 
-### 2. Configure
+#### Camera
+- `GET /camera/snapshot` - Capture a single image
+- `POST /camera/stream/start` - Start video streaming
+- `POST /camera/stream/stop` - Stop video streaming
+- `GET /camera/status` - Get camera status
 
-```bash
-cp .env.example .env
-```
+#### Heat Sensor
+- `GET /heat` - Get temperature and humidity
+- `GET /heat/temperature` - Get temperature only
+- `GET /heat/humidity` - Get humidity only
 
-Edit `.env` if needed:
-```env
-HOST=0.0.0.0
-PORT=8000
-DATABASE_URL=sqlite+aiosqlite:///./sqlite.db
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-```
+#### Light Control
+- `POST /light/on` - Turn light on
+- `POST /light/off` - Turn light off
+- `POST /light/toggle` - Toggle light state
+- `GET /light/status` - Get light status
 
-### 3. Run
+### Mock Implementations
 
-```bash
-uvicorn main:app --reload
-```
+All hardware modules use mock implementations by default. This allows:
+- Safe development on non-Raspberry Pi systems
+- Testing without physical hardware
+- Easy replacement with real hardware code later
 
-Or:
-```bash
-python main.py
-```
+To connect real hardware, replace the mock implementations in the `modules/` directory with actual GPIO/sensor code.
 
-### 4. Test
+### Design Principles
 
-Visit:
-- **API Docs**: http://localhost:8000/api/docs
-- **Health**: http://localhost:8000/health
+1. **Separation of Concerns**
+   - `api/` layer: HTTP routing, validation, responses
+   - `modules/` layer: Hardware control only
 
+2. **Single Process**
+   - Not a microservices architecture
+   - All code runs in one FastAPI process
+   - Direct Python imports between layers
 
-## Database
+3. **Hardware Safety**
+   - Mock implementations prevent GPIO errors
+   - Safe to run on any system
+   - Real hardware code can be dropped in when ready
 
-Uses SQLite by default. Data stored in `sqlite.db`:
+### Development
 
-
-## Production Deployment
-
-### Systemd Service
-
-Create `/etc/systemd/system/backend.service`:
-
-```ini
-[Unit]
-Description=Raspberrypi Backend API
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/raspberrypi-projects/backend
-Environment="PATH=/home/pi/raspberrypi-projects/backend/venv/bin"
-ExecStart=/home/pi/raspberrypi-projects/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable:
-```bash
-sudo systemctl enable backend
-sudo systemctl start backend
-```
-
-## Related
-
-- [Main Project README](../README.md)
-- [Architecture Docs](../docs/architecture.md)
+- The server runs with auto-reload enabled in development mode
+- Check the interactive API docs at `/docs` for testing endpoints
+- All routes return JSON suitable for a Svelte frontend

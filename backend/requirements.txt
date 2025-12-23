@@ -1,14 +1,15 @@
-# FastAPI and ASGI Server
+# FastAPI Backend Requirements
+# Python dependencies for the Raspberry Pi hardware control backend
+
+# Core FastAPI dependencies
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
+pydantic==2.5.3
 
-# Database
-sqlalchemy==2.0.36
-aiosqlite==0.20.0
+# CORS middleware is included in FastAPI
+# No additional dependencies needed for basic functionality
 
-# Environment Variables
-python-dotenv==1.0.0
-
-# Data Validation
-pydantic==2.10.5
-pydantic-settings==2.7.0
+# Optional: Add these when ready to connect real hardware
+# RPi.GPIO==0.7.1  # For GPIO control (relay, sensors)
+# picamera2  # For Raspberry Pi camera
+# adafruit-circuitpython-dht  # For DHT temperature sensors
