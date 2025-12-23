@@ -7,6 +7,10 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.10.0
 
+# Camera streaming dependencies
+opencv-python-headless>=4.10.0  # For RTSP camera streaming (headless for servers)
+# System monitoring
+psutil>=5.9.0  # System and process utilities
 # CORS middleware is included in FastAPI
 # No additional dependencies needed for basic functionality
 
