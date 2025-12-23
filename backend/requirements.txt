@@ -1,10 +1,11 @@
 # FastAPI Backend Requirements
 # Python dependencies for the Raspberry Pi hardware control backend
+# Compatible with Python 3.13+
 
 # Core FastAPI dependencies
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
 
 # CORS middleware is included in FastAPI
 # No additional dependencies needed for basic functionality
