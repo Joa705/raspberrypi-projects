@@ -6,8 +6,11 @@ It uses mock implementations to be safe on non-Raspberry Pi systems.
 Replace with actual GPIO library calls when deployed on hardware.
 """
 
+import logging
 import time
 from typing import Dict
+
+logger = logging.getLogger(__name__)
 
 
 class LightRelay:
@@ -38,13 +41,13 @@ class LightRelay:
         try:
             # Mock GPIO initialization
             # In real implementation, this would setup GPIO pin
-            print(f"[MOCK] Initializing light relay on GPIO pin {self.gpio_pin}...")
+            logger.info(f"[MOCK] Initializing light relay on GPIO pin {self.gpio_pin}...")
             time.sleep(0.05)  # Simulate initialization delay
             self.is_initialized = True
             self.is_on = False  # Start with light off
-            print("[MOCK] Light relay initialized successfully")
+            logger.info("[MOCK] Light relay initialized successfully")
         except Exception as e:
-            print(f"[MOCK] Light relay initialization failed: {e}")
+            logger.error(f"[MOCK] Light relay initialization failed: {e}")
             self.is_initialized = False
     
     def turn_on(self) -> bool:
@@ -55,20 +58,20 @@ class LightRelay:
             bool: True if successful, False otherwise
         """
         if not self.is_initialized:
-            print("[MOCK] Light relay not initialized")
+            logger.warning("[MOCK] Light relay not initialized")
             return False
         
         try:
             # Mock turning on the relay
             # Real implementation would set GPIO pin HIGH
-            print("[MOCK] Turning light ON...")
+            logger.info("[MOCK] Turning light ON...")
             time.sleep(0.05)  # Simulate relay switching delay
             self.is_on = True
-            print("[MOCK] Light is now ON")
+            logger.info("[MOCK] Light is now ON")
             return True
             
         except Exception as e:
-            print(f"[MOCK] Failed to turn light on: {e}")
+            logger.error(f"[MOCK] Failed to turn light on: {e}")
             return False
     
     def turn_off(self) -> bool:
@@ -79,20 +82,20 @@ class LightRelay:
             bool: True if successful, False otherwise
         """
         if not self.is_initialized:
-            print("[MOCK] Light relay not initialized")
+            logger.warning("[MOCK] Light relay not initialized")
             return False
         
         try:
             # Mock turning off the relay
             # Real implementation would set GPIO pin LOW
-            print("[MOCK] Turning light OFF...")
+            logger.info("[MOCK] Turning light OFF...")
             time.sleep(0.05)  # Simulate relay switching delay
             self.is_on = False
-            print("[MOCK] Light is now OFF")
+            logger.info("[MOCK] Light is now OFF")
             return True
             
         except Exception as e:
-            print(f"[MOCK] Failed to turn light off: {e}")
+            logger.error(f"[MOCK] Failed to turn light off: {e}")
             return False
     
     def toggle(self) -> bool:
@@ -124,7 +127,7 @@ class LightRelay:
         """
         Clean up GPIO resources.
         """
-        print("[MOCK] Cleaning up light relay resources...")
+        logger.info("[MOCK] Cleaning up light relay resources...")
         if self.is_on:
             self.turn_off()
         self.is_initialized = False

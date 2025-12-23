@@ -6,8 +6,11 @@ It uses mock implementations to be safe on non-Raspberry Pi systems.
 Replace with actual camera library calls when deployed on hardware.
 """
 
+import logging
 import time
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class CameraDriver:
@@ -33,14 +36,14 @@ class CameraDriver:
         try:
             # Mock initialization
             # In real implementation, this would initialize picamera2 or similar
-            print("[MOCK] Initializing camera hardware...")
+            logger.info("[MOCK] Initializing camera hardware...")
             time.sleep(0.1)  # Simulate initialization delay
             self.is_initialized = True
             self.camera_active = True
-            print("[MOCK] Camera initialized successfully")
+            logger.info("[MOCK] Camera initialized successfully")
             return True
         except Exception as e:
-            print(f"[MOCK] Camera initialization failed: {e}")
+            logger.error(f"[MOCK] Camera initialization failed: {e}")
             return False
     
     def capture_image(self) -> Optional[bytes]:
@@ -51,23 +54,23 @@ class CameraDriver:
             Optional[bytes]: Image data as bytes, or None if capture failed
         """
         if not self.is_initialized or not self.camera_active:
-            print("[MOCK] Camera not initialized")
+            logger.warning("[MOCK] Camera not initialized")
             return None
         
         try:
             # Mock image capture
             # In real implementation, this would capture actual image data
-            print("[MOCK] Capturing image...")
+            logger.info("[MOCK] Capturing image...")
             time.sleep(0.2)  # Simulate capture delay
             
             # Return mock image data (empty bytes for now)
             # Real implementation would return JPEG/PNG bytes
             mock_image_data = b"MOCK_IMAGE_DATA"
-            print("[MOCK] Image captured successfully")
+            logger.info("[MOCK] Image captured successfully")
             return mock_image_data
             
         except Exception as e:
-            print(f"[MOCK] Image capture failed: {e}")
+            logger.error(f"[MOCK] Image capture failed: {e}")
             return None
     
     def start_stream(self) -> bool:
@@ -80,7 +83,7 @@ class CameraDriver:
         if not self.is_initialized:
             return False
         
-        print("[MOCK] Starting video stream...")
+        logger.info("[MOCK] Starting video stream...")
         self.camera_active = True
         return True
     
@@ -91,7 +94,7 @@ class CameraDriver:
         Returns:
             bool: True if stream stopped successfully, False otherwise
         """
-        print("[MOCK] Stopping video stream...")
+        logger.info("[MOCK] Stopping video stream...")
         self.camera_active = False
         return True
     
@@ -99,6 +102,6 @@ class CameraDriver:
         """
         Clean up camera resources.
         """
-        print("[MOCK] Cleaning up camera resources...")
+        logger.info("[MOCK] Cleaning up camera resources...")
         self.camera_active = False
         self.is_initialized = False

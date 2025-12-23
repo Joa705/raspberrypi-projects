@@ -8,11 +8,29 @@ exposes a REST API for a Svelte frontend.
 This is a single-process application, not a microservices architecture.
 """
 
+import logging
+import sys
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import API routers
+# Setup logging AFTER imports to ensure it works with uvicorn
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True
+)
+
+# Set log level for our application modules specifically
+logging.getLogger("modules").setLevel(logging.INFO)
+
+# Import API routers (modules get initialized here)
 from api import camera, heat, light
+
+logger = logging.getLogger(__name__)
+logger.info("FastAPI Backend starting up...")
 
 # Create FastAPI application
 app = FastAPI(
@@ -88,4 +106,9 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=8000, 
+        reload=True  # Disable uvicorn's default log config to use ours
+    )

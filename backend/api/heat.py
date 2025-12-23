@@ -14,12 +14,15 @@ from modules.heat import HeatSensor
 # Import models
 from models.heat import TemperatureResponse
 
+import logging
+
 # Create API router
 router = APIRouter()
 
 # Create a single heat sensor instance
 heat_sensor = HeatSensor()
 
+logger = logging.getLogger(__name__)
 
 @router.get(
     "/",

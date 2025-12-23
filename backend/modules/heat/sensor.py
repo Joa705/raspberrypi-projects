@@ -6,9 +6,12 @@ It uses mock implementations to be safe on non-Raspberry Pi systems.
 Replace with actual sensor library calls when deployed on hardware.
 """
 
+import logging
 import random
 import time
 from typing import Optional, Dict
+
+logger = logging.getLogger(__name__)
 
 
 class HeatSensor:
@@ -32,12 +35,12 @@ class HeatSensor:
         try:
             # Mock initialization
             # In real implementation, this would initialize GPIO and sensor
-            print("[MOCK] Initializing heat sensor...")
+            logger.info("[MOCK] Initializing heat sensor...")
             time.sleep(0.05)  # Simulate initialization delay
             self.is_initialized = True
-            print("[MOCK] Heat sensor initialized successfully")
+            logger.info("[MOCK] Heat sensor initialized successfully")
         except Exception as e:
-            print(f"[MOCK] Heat sensor initialization failed: {e}")
+            logger.error(f"[MOCK] Heat sensor initialization failed: {e}")
             self.is_initialized = False
     
     def read_temperature(self) -> Optional[float]:
@@ -48,7 +51,7 @@ class HeatSensor:
             Optional[float]: Temperature in Celsius, or None if read failed
         """
         if not self.is_initialized:
-            print("[MOCK] Heat sensor not initialized")
+            logger.warning("[MOCK] Heat sensor not initialized")
             return None
         
         try:
@@ -57,11 +60,11 @@ class HeatSensor:
             variation = random.uniform(-2.0, 2.0)
             temperature = self.base_temperature + variation
             
-            print(f"[MOCK] Temperature reading: {temperature:.1f}°C")
+            logger.debug(f"[MOCK] Temperature reading: {temperature:.1f}°C")
             return round(temperature, 1)
             
         except Exception as e:
-            print(f"[MOCK] Temperature read failed: {e}")
+            logger.error(f"[MOCK] Temperature read failed: {e}")
             return None
     
     def read_humidity(self) -> Optional[float]:
@@ -78,11 +81,11 @@ class HeatSensor:
             # Mock humidity reading
             # Some sensors like DHT22 provide both temperature and humidity
             humidity = random.uniform(40.0, 60.0)
-            print(f"[MOCK] Humidity reading: {humidity:.1f}%")
+            logger.debug(f"[MOCK] Humidity reading: {humidity:.1f}%")
             return round(humidity, 1)
             
         except Exception as e:
-            print(f"[MOCK] Humidity read failed: {e}")
+            logger.error(f"[MOCK] Humidity read failed: {e}")
             return None
     
     def get_reading(self) -> Dict:
@@ -109,5 +112,5 @@ class HeatSensor:
         """
         Clean up sensor resources.
         """
-        print("[MOCK] Cleaning up heat sensor resources...")
+        logger.info("[MOCK] Cleaning up heat sensor resources...")
         self.is_initialized = False
