@@ -78,7 +78,8 @@ To connect real hardware, replace the mock implementations in the `modules/` dir
 ### Design Principles
 
 1. **Separation of Concerns**
-   - `api/` layer: HTTP routing, validation, responses
+   - `api/` layer: HTTP routing, responses
+   - `models/` layer: Validation
    - `modules/` layer: Hardware control only
 
 2. **Single Process**
