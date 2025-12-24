@@ -27,7 +27,7 @@ Base = declarative_base()
 
 async def init_db():
     """Initialize database and create tables."""
-    from database.models import Module, Camera
+    from database.models import Camera
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

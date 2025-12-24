@@ -23,6 +23,7 @@ psutil>=5.9.0  # System and process utilities
 # Database
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
+greenlet>=3.0.0  # Required for SQLAlchemy async operations
 
 # Environment Variables
 python-dotenv==1.0.0
