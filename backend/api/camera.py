@@ -5,8 +5,8 @@ This module defines FastAPI routes for camera operations.
 Provides endpoints for streaming from multiple Tapo cameras.
 """
 
-from fastapi import APIRouter, HTTPException, Request, Depends
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, HTTPException, Request, Depends, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any
 import logging
@@ -18,8 +18,8 @@ from models.camera import CameraBase, CameraCreateRequest, CameraCreateResponse
 
 # Import camera controller
 from database.crud_camera import db_get_camera, db_get_cameras, db_create_camera
-from database.db import get_db
-from modules.camera.controller import get_camera_controller
+from database.db import get_db, AsyncSessionLocal
+from modules.camera.controller import get_camera_controller, CameraController
 
 logger = logging.getLogger(__name__)
 
@@ -27,28 +27,47 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def generate_stream(camera_id: int, request: Request, camera_data: CameraBase):
+@router.websocket("/{camera_id}/ws")
+async def camera_websocket(websocket: WebSocket, camera_id: int):
     """
-    Generator function that yields MJPEG frames for a specific camera.
-    Manages viewer lifecycle for the stream.
+    WebSocket endpoint for camera streaming.
+    Provides reliable connection management and automatic cleanup.
     """
-    controller = get_camera_controller()
-    
-    stream = controller.get_stream(camera_id, camera_data)
-    
-    if stream is None:
-        logger.error(f"Camera {camera_id} not found")
-        return
-    
-    # Add this viewer to the stream
-    if not stream.add_viewer():
-        logger.error(f"Failed to start stream for camera {camera_id}")
-        return
+    stream = None
+    viewer_added = False
     
     try:
-        logger.info(f"Starting stream for viewer on camera {camera_id}")
+        await websocket.accept()
+        logger.info(f"Camera {camera_id}: WebSocket client connected")
+
+        # Manually create database session for WebSocket
+        async with AsyncSessionLocal() as db:
+            db_camera = await db_get_camera(db, camera_id)
+            if not db_camera:
+                try:
+                    await websocket.send_json({"error": "Camera not found"})
+                    await websocket.close()
+                except Exception:
+                    pass
+                return
+                
+            camera_data = CameraBase.model_validate(db_camera, from_attributes=True)
         
-        # Wait for first frame to be available (up to 5 seconds)
+        controller = get_camera_controller()
+        stream = controller.get_stream(camera_id, camera_data)
+        
+        if not stream or not stream.add_viewer():
+            try:
+                await websocket.send_json({"error": "Failed to start stream"})
+                await websocket.close()
+            except Exception:
+                pass
+            return
+        
+        viewer_added = True
+        logger.info(f"Camera {camera_id}: Starting WebSocket stream")
+        
+        # Wait for first frame
         retries = 0
         while stream.is_running and stream.get_frame() is None and retries < 50:
             await asyncio.sleep(0.1)
@@ -56,79 +75,61 @@ async def generate_stream(camera_id: int, request: Request, camera_data: CameraB
         
         last_frame = None
         frames_sent = 0
+        disconnected = False
         
-        # Stream frames to the client
-        while stream.is_running:
-            # Check if client is still connected
-            if await request.is_disconnected():
-                logger.info(f"Camera {camera_id}: Client disconnected (detected by request)")
-                break
-            
+        # Stream frames with immediate disconnect detection
+        while stream.is_running and not disconnected:
             frame_bytes = stream.get_frame()
             
-            if frame_bytes is None:
-                # No new frame, wait a bit
-                await asyncio.sleep(0.01)
-                continue
-            
-            # Only send if frame changed (reduces redundant sends)
-            if frame_bytes != last_frame:
+            if frame_bytes and frame_bytes != last_frame:
                 last_frame = frame_bytes
                 frames_sent += 1
-                
-                # Yield frame in MJPEG format
+                                
+                # Send frame - catch any send errors
                 try:
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                    await websocket.send_bytes(frame_bytes)
+                except (WebSocketDisconnect, RuntimeError, ConnectionError):
+                    logger.info(f"Camera {camera_id}: Client disconnected during send")
+                    disconnected = True
+                    break
                 except Exception as e:
-                    # Connection broken
-                    logger.info(f"Camera {camera_id}: Connection broken after {frames_sent} frames: {e}")
+                    logger.warning(f"Camera {camera_id}: Unexpected send error: {type(e).__name__}")
+                    disconnected = True
                     break
             
-            # Small delay to prevent overwhelming the connection
-            await asyncio.sleep(0.033)  # ~30 FPS
+            # Check for disconnect with short timeout
+            if not disconnected:
+                try:
+                    await asyncio.wait_for(websocket.receive_text(), timeout=0.033)
+                except asyncio.TimeoutError:
+                    # Expected timeout - continue streaming
+                    pass
+                except (WebSocketDisconnect, RuntimeError, ConnectionError):
+                    logger.info(f"Camera {camera_id}: Client disconnected during receive")
+                    disconnected = True
+                    break
+                except Exception as e:
+                    logger.warning(f"Camera {camera_id}: Unexpected receive error: {type(e).__name__}")
+                    disconnected = True
+                    break
     
-    except GeneratorExit:
-        # Client disconnected
-        logger.info(f"Client disconnected from camera {camera_id}")
+    except WebSocketDisconnect:
+        logger.info(f"Camera {camera_id}: WebSocket disconnect exception")
     
     except Exception as e:
-        logger.error(f"Error streaming camera {camera_id}: {e}")
+        logger.error(f"Camera {camera_id}: WebSocket error: {e}", exc_info=True)
     
     finally:
-        # Remove this viewer from the stream
-        stream.remove_viewer()
-        logger.info(f"Viewer removed from camera {camera_id}")
-
-
-@router.get("/{camera_id}/stream")
-async def camera_stream(camera_id: int, request: Request, db: AsyncSession = Depends(get_db)) -> StreamingResponse:
-    """
-    Stream live video from a specific camera.
-    
-    The stream starts automatically when the first viewer connects
-    and stops when the last viewer disconnects.
-    
-    Args:
-        camera_id: ID of the camera to stream from
-        request: FastAPI request object for disconnect detection
-    
-    Returns:
-        StreamingResponse with MJPEG video stream
-    """
-    
-    db_camera = await db_get_camera(db, camera_id)
-    # Check if camera exists
-    if not db_camera:
-        raise HTTPException(status_code=404, detail="Camera not found") 
-    
-    camera_data = CameraBase.model_validate(db_camera, from_attributes=True)
-
-    # Return streaming response
-    return StreamingResponse(
-        generate_stream(camera_id, request, camera_data),
-        media_type="multipart/x-mixed-replace; boundary=frame"
-    )
+        # Always cleanup, but only if viewer was added
+        if viewer_added and stream:
+            logger.info(f"Camera {camera_id} disconnected: Cleaning up WebSocket viewer")
+            stream.remove_viewer()
+        
+        # Ensure WebSocket is closed
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @router.get("/{camera_id}/status")

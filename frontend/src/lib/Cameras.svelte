@@ -1,12 +1,24 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { fetchCameras, getCameraStreamUrl, cleanupCamera } from './api.js';
+  import { fetchCameras, cleanupCamera } from './api.js';
 
   let cameras = {};
   let loading = true;
   let error = null;
-  let activeStreams = new Map();
+  let activeStreams = new Map(); // Map<cameraId, WebSocket>
+  let canvasRefs = new Map(); // Map<cameraId, canvas element>
+  let intentionalCloses = new Set(); // Track intentional closes by cameraId
   let statusInterval;
+
+  // Action to bind canvas element to Map
+  function bindCanvas(node, cameraId) {
+    canvasRefs.set(cameraId, node);
+    return {
+      destroy() {
+        canvasRefs.delete(cameraId);
+      }
+    };
+  }
 
   async function loadCameras() {
     try {
@@ -21,14 +33,83 @@
   }
 
   function startStream(cameraId) {
-    const streamUrl = getCameraStreamUrl(cameraId);
-    activeStreams.set(cameraId, streamUrl);
-    activeStreams = activeStreams; // Trigger reactivity
+    // Prevent duplicate connections
+    if (activeStreams.has(cameraId)) {
+      console.log(`Stream ${cameraId} already active`);
+      return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.hostname}:8000/camera/${cameraId}/ws`;
+    
+    console.log(`Connecting to WebSocket: ${wsUrl}`);
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      console.log(`Camera ${cameraId}: WebSocket connected`);
+      activeStreams.set(cameraId, ws);
+      activeStreams = activeStreams; // Trigger reactivity
+    };
+
+    ws.onmessage = async (event) => {
+      // Draw frame directly to canvas (no blob URL needed!)
+      const canvas = canvasRefs.get(cameraId);
+      if (!canvas) return;
+      
+      try {
+        const blob = new Blob([event.data], { type: 'image/jpeg' });
+        const imageBitmap = await createImageBitmap(blob);
+        
+        const ctx = canvas.getContext('2d');
+        canvas.width = imageBitmap.width;
+        canvas.height = imageBitmap.height;
+        ctx.drawImage(imageBitmap, 0, 0);
+        
+        imageBitmap.close(); // Free memory
+      } catch (err) {
+        console.error(`Camera ${cameraId}: Error drawing frame`, err);
+      }
+    };
+
+    ws.onerror = (err) => {
+      // Only show error if not an intentional close
+      if (!intentionalCloses.has(cameraId) && ws.readyState !== WebSocket.CLOSED) {
+        console.error(`Camera ${cameraId}: WebSocket error`, err);
+        error = `Connection error for camera ${cameraId}`;
+      }
+    };
+
+    ws.onclose = () => {
+      console.log(`Camera ${cameraId}: WebSocket closed`);
+      activeStreams.delete(cameraId);
+      intentionalCloses.delete(cameraId); // Clean up tracking
+      activeStreams = activeStreams; // Trigger reactivity
+      
+      // Clear canvas
+      const canvas = canvasRefs.get(cameraId);
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
   }
 
   function stopStream(cameraId) {
-    activeStreams.delete(cameraId);
-    activeStreams = activeStreams; // Trigger reactivity
+    const ws = activeStreams.get(cameraId);
+    if (ws) {
+      console.log(`Camera ${cameraId}: Closing WebSocket`);
+      
+      // Mark as intentional close to prevent error logging
+      intentionalCloses.add(cameraId);
+      
+      // Only close if not already closed/closing
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+      
+      // Cleanup happens in ws.onclose handler
+    }
   }
 
   function toggleStream(cameraId) {
@@ -41,8 +122,8 @@
 
   async function forceCleanup(cameraId) {
     try {
+      stopStream(cameraId); // Close WebSocket first
       await cleanupCamera(cameraId);
-      stopStream(cameraId);
       await loadCameras();
     } catch (e) {
       error = `Failed to cleanup ${cameraId}: ${e.message}`;
@@ -57,8 +138,14 @@
 
   onDestroy(() => {
     if (statusInterval) clearInterval(statusInterval);
-    // Stop all streams
+    
+    // Close all WebSocket connections
+    activeStreams.forEach((ws, cameraId) => {
+      console.log(`Cleanup: Closing WebSocket for ${cameraId}`);
+      ws.close();
+    });
     activeStreams.clear();
+    canvasRefs.clear();
   });
 </script>
 
@@ -88,14 +175,10 @@
           
           <div class="stream-container">
             {#if activeStreams.has(cameraId)}
-              <img 
-                src={activeStreams.get(cameraId)} 
-                alt={camera.camera_name}
-                on:error={() => {
-                  error = `Failed to load stream from ${cameraId}`;
-                  stopStream(cameraId);
-                }}
-              />
+              <canvas 
+                use:bindCanvas={cameraId}
+                class="stream-canvas"
+              ></canvas>
             {:else}
               <div class="placeholder">Stream not started</div>
             {/if}
@@ -226,10 +309,17 @@
     margin-bottom: 1rem;
   }
 
-  .stream-container img {
+  .stream-container img,
+  .stream-container canvas {
     width: 100%;
     height: auto;
     display: block;
+  }
+
+  .connecting {
+    color: #2196f3;
+    padding: 2rem;
+    font-size: 1.1rem;
   }
 
   .placeholder {
