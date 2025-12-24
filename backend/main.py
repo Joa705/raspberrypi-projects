@@ -17,6 +17,8 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from models.system import SystemInfo
+
 # Setup logging AFTER imports to ensure it works with uvicorn
 logging.basicConfig(
     level=logging.INFO,
@@ -107,7 +109,7 @@ async def health():
     return {"status": "healthy"}
 
 
-@app.get("/system-info")
+@app.get("/system-info", response_model=SystemInfo)
 async def system_info():
     """
     Get comprehensive system information about the Raspberry Pi.
@@ -168,9 +170,9 @@ async def system_info():
     total_viewers = sum(cam['viewer_count'] for cam in camera_stats.values())
     active_streams = sum(1 for cam in camera_stats.values() if cam['is_running'])
     
-    return {
-        "timestamp": datetime.now().isoformat(),
-        "cpu": {
+    return SystemInfo(
+        timestamp=datetime.now().isoformat(),
+        cpu={
             "usage_percent": round(cpu_percent, 1),
             "per_core": [round(core, 1) for core in cpu_per_core],
             "cores": cpu_count,
@@ -181,36 +183,37 @@ async def system_info():
                 "15min": round(load_avg[2], 2)
             }
         },
-        "memory": {
+        memory={
             "total_gb": round(memory.total / (1024**3), 2),
             "used_gb": round(memory.used / (1024**3), 2),
             "available_gb": round(memory.available / (1024**3), 2),
             "percent": memory.percent
         },
-        "swap": {
+        swap={
             "total_gb": round(swap.total / (1024**3), 2),
             "used_gb": round(swap.used / (1024**3), 2),
             "percent": swap.percent
         },
-        "disk": {
+        disk={
             "total_gb": round(disk.total / (1024**3), 2),
             "used_gb": round(disk.used / (1024**3), 2),
             "free_gb": round(disk.free / (1024**3), 2),
             "percent": disk.percent
         },
-        "temperature": temperature,
-        "uptime": {
+        temperature=temperature,
+        uptime={
             "seconds": round(uptime_seconds),
             "hours": round(uptime_hours, 1),
             "boot_time": boot_time.isoformat()
         },
-        "cameras": {
+        cameras={
             "active_streams": active_streams,
             "total_viewers": total_viewers,
             "total_cameras": len(camera_stats)
         }
-    }
-
+    )
+    
+   
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
