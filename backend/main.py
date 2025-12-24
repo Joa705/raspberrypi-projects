@@ -16,10 +16,12 @@ from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
 from config import settings
 from models.system import SystemInfo
 from api import camera, heat, light
+from database.db import init_db
 
 logging.basicConfig(
     level=settings.log_level,
@@ -27,21 +29,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-logger.info("FastAPI Backend starting up...")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan - startup and shutdown."""
+    logger.info("Starting FastAPI backend...")
+    await init_db()
+    logger.info("Database initialized")
+    yield
+    logger.info("Shutting down...")
 
 # Create FastAPI application
 app = FastAPI(
     title="Raspberry Pi Hardware Control API",
-    description="""Backend API for controlling Raspberry Pi hardware modules.
-    
-    This API provides endpoints to control:
-    - **Camera**: Capture snapshots and manage video streaming
-    - **Heat Sensor**: Read temperature and humidity data
-    - **Light**: Control relay-connected lighting
-    
-    All endpoints return JSON responses suitable for frontend consumption.
-    """,
+    description="""Backend API for controlling Raspberry Pi hardware modules""",
+    lifespan=lifespan,
     version="1.0.0",
     contact={
         "name": "Raspberry Pi Projects",
