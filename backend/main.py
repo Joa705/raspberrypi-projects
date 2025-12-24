@@ -17,24 +17,17 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from config import settings
 from models.system import SystemInfo
-
-# Setup logging AFTER imports to ensure it works with uvicorn
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-    force=True
-)
-
-# Set log level for our application modules specifically
-logging.getLogger("modules").setLevel(logging.INFO)
-
-# Import API routers (modules get initialized here)
 from api import camera, heat, light
 
+logging.basicConfig(
+    level=settings.log_level,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
+
 logger.info("FastAPI Backend starting up...")
 
 # Create FastAPI application
@@ -217,8 +210,8 @@ async def system_info():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main:app", 
-        host="0.0.0.0", 
-        port=8000,
-        reload=True
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug
     )

@@ -6,6 +6,7 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.10.0
+pydantic-settings>=2.0.0
 
 # Camera streaming dependencies
 opencv-python-headless>=4.10.0  # For RTSP camera streaming (headless for servers)
@@ -18,3 +19,10 @@ psutil>=5.9.0  # System and process utilities
 # RPi.GPIO==0.7.1  # For GPIO control (relay, sensors)
 # picamera2  # For Raspberry Pi camera
 # adafruit-circuitpython-dht  # For DHT temperature sensors
+
+# Database
+sqlalchemy==2.0.36
+aiosqlite==0.20.0
+
+# Environment Variables
+python-dotenv==1.0.0
