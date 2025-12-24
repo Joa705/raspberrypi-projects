@@ -184,9 +184,7 @@ async def list_cameras(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         camera_data = CameraBase.model_validate(camera, from_attributes=True)
         stream = controller.get_stream(camera.camera_id, camera_data)
         
-        logger.info(f"Stream found for Camera ID: {camera.camera_id}: {stream is not None}")
         if stream:
-            logger.info(f"Camera {camera.camera_id} status: {stream.get_status()}")
             cameras[camera.camera_id] = stream.get_status()
         else:
             cameras[camera.camera_id] = {
