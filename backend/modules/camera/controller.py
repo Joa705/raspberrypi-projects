@@ -19,10 +19,9 @@ import cv2
 from typing import Dict, Optional
 from queue import Queue, Empty
 
-from .config import get_camera_config, camera_exists
+from models.camera import CameraBase
 
 logger = logging.getLogger(__name__)
-
 
 class CameraStream:
     """
@@ -32,15 +31,29 @@ class CameraStream:
     when the last viewer disconnects.
     """
     
-    def __init__(self, camera_id: str):
-        """Initialize camera stream manager"""
+    def __init__(self, camera_id: int, camera_data: CameraBase):
+        """
+        Initialize camera stream manager
+        
+        Args:
+            camera_id: Database ID of the camera
+            name: Camera display name
+            ip_address: Camera IP address
+            username: RTSP authentication username
+            password: RTSP authentication password
+            stream_quality: Stream quality (stream1=HD, stream2=SD)
+        """
         self.camera_id = camera_id
-        self.config = get_camera_config(camera_id)
+        self.name = camera_data.name
+        self.ip_address = camera_data.ip_address
+        self.username = camera_data.username
+        self.password = camera_data.password
+        self.stream_quality = camera_data.stream_quality
         
         # RTSP URL construction
         self.rtsp_url = (
-            f"rtsp://{self.config.username}:{self.config.password}"
-            f"@{self.config.ip_address}:554/{self.config.stream_quality}"
+            f"rtsp://{self.username}:{self.password}"
+            f"@{self.ip_address}:554/{self.stream_quality}"
         )
         
         # Stream state
@@ -54,8 +67,8 @@ class CameraStream:
         self.current_frame = None
         self.frame_lock = threading.Lock()
         
-        logger.info(f"Camera stream manager created for {camera_id}")
-    
+        logger.info(f"Camera stream manager created for {camera_id} ({self.name})")
+        
     def add_viewer(self) -> bool:
         """
         Add a viewer to this stream. Starts the stream if this is the first viewer.
@@ -89,7 +102,7 @@ class CameraStream:
             return True
         
         try:
-            logger.info(f"Camera {self.camera_id}: Starting RTSP stream from {self.config.ip_address}")
+            logger.info(f"Camera {self.camera_id}: Starting RTSP stream from {self.ip_address}")
             
             # Initialize OpenCV capture
             self.capture = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
@@ -220,10 +233,10 @@ class CameraStream:
         with self.lock:
             return {
                 "camera_id": self.camera_id,
-                "camera_name": self.config.name,
+                "camera_name": self.name,
                 "is_running": self.is_running,
                 "viewer_count": self.viewer_count,
-                "ip_address": self.config.ip_address
+                "ip_address": self.ip_address
             }
 
 
@@ -241,20 +254,27 @@ class CameraController:
         self.lock = threading.Lock()
         logger.info("Camera controller initialized")
     
-    def get_stream(self, camera_id: str) -> Optional[CameraStream]:
+    def get_stream(self, camera_id: int, camera_data: CameraBase = None) -> Optional[CameraStream]:
         """
         Get or create a stream for the specified camera.
-        Returns None if the camera doesn't exist in configuration.
-        """
-        if not camera_exists(camera_id):
-            logger.warning(f"Camera {camera_id} not found in configuration")
-            return None
         
+        Args:
+            camera_id: Database ID of the camera
+            camera_data: Dict with keys: name, ip_address, username, password, stream_quality
+                        Required when creating a new stream
+        
+        Returns:
+            CameraStream instance or None if camera_data not provided for new stream
+        """
         with self.lock:
             if camera_id not in self.streams:
-                # Create new stream manager
-                self.streams[camera_id] = CameraStream(camera_id)
-            
+                # Need camera data to create new stream
+                if camera_data is None:
+                    logger.warning(f"Camera {camera_id} not found and no data provided")
+                    return None
+                
+                # Create new stream manager with provided data
+                self.streams[camera_id] = CameraStream(camera_id=camera_id, camera_data=camera_data)   
             return self.streams[camera_id]
     
     def cleanup_inactive_streams(self):

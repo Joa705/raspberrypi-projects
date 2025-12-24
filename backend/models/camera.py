@@ -19,9 +19,9 @@ class CameraBase(BaseModel):
     description: str = Field(default="", description="Camera description", example="Main living room camera")
 
 
-class CameraCreate(CameraBase):
+class CameraCreateRequest(CameraBase):
     """Model for creating a new camera"""
-    pass
+    pass  # Inherits all fields from CameraBase
 
 
 class CameraUpdate(BaseModel):
@@ -34,7 +34,7 @@ class CameraUpdate(BaseModel):
     description: Optional[str] = Field(None, description="Camera description")
 
 
-class CameraResponse(CameraBase):
+class CameraCreateResponse(CameraBase):
     """Model for camera response from database"""
     camera_id: int = Field(..., description="Auto-generated camera identifier", example=1)
     created_at: datetime = Field(..., description="Camera creation timestamp")

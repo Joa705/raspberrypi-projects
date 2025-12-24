@@ -5,19 +5,21 @@ This module defines FastAPI routes for camera operations.
 Provides endpoints for streaming from multiple Tapo cameras.
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any
 import logging
 import time
 import asyncio
 
 # Import models
-from models.camera import CameraStatusResponse
+from models.camera import CameraBase, CameraCreateRequest, CameraCreateResponse
 
 # Import camera controller
+from database.crud_camera import db_get_camera, db_get_cameras, db_create_camera
+from database.db import get_db
 from modules.camera.controller import get_camera_controller
-from modules.camera.config import get_all_camera_ids, camera_exists, get_camera_config
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +27,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def generate_stream(camera_id: str, request: Request):
+async def generate_stream(camera_id: int, request: Request, camera_data: CameraBase):
     """
     Generator function that yields MJPEG frames for a specific camera.
     Manages viewer lifecycle for the stream.
     """
     controller = get_camera_controller()
-    stream = controller.get_stream(camera_id)
+    
+    stream = controller.get_stream(camera_id, camera_data)
     
     if stream is None:
         logger.error(f"Camera {camera_id} not found")
@@ -99,7 +102,7 @@ async def generate_stream(camera_id: str, request: Request):
 
 
 @router.get("/{camera_id}/stream")
-async def camera_stream(camera_id: str, request: Request):
+async def camera_stream(camera_id: int, request: Request, db: AsyncSession = Depends(get_db)) -> StreamingResponse:
     """
     Stream live video from a specific camera.
     
@@ -113,22 +116,23 @@ async def camera_stream(camera_id: str, request: Request):
     Returns:
         StreamingResponse with MJPEG video stream
     """
-    # Check if camera exists
-    if not camera_exists(camera_id):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Camera '{camera_id}' not found in configuration"
-        )
     
+    db_camera = await db_get_camera(db, camera_id)
+    # Check if camera exists
+    if not db_camera:
+        raise HTTPException(status_code=404, detail="Camera not found") 
+    
+    camera_data = CameraBase.model_validate(db_camera, from_attributes=True)
+
     # Return streaming response
     return StreamingResponse(
-        generate_stream(camera_id, request),
+        generate_stream(camera_id, request, camera_data),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
 
 
 @router.get("/{camera_id}/status")
-async def camera_status(camera_id: str) -> Dict[str, Any]:
+async def camera_status(camera_id: int, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     Get the current status of a specific camera.
     
@@ -138,31 +142,33 @@ async def camera_status(camera_id: str) -> Dict[str, Any]:
     Returns:
         Camera status including viewer count and stream state
     """
-    if not camera_exists(camera_id):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Camera '{camera_id}' not found in configuration"
-        )
+    
+    db_camera = await db_get_camera(db, camera_id)
+    # Check if camera exists
+    if not db_camera:
+        raise HTTPException(status_code=404, detail="Camera not found") 
+    
+    # Validate database camera object to Pydantic model
+    camera_data = CameraBase.model_validate(db_camera, from_attributes=True)
     
     controller = get_camera_controller()
-    stream = controller.get_stream(camera_id)
+    stream = controller.get_stream(camera_id, camera_data)
     
     if stream:
         return stream.get_status()
     else:
-        # Camera exists in config but stream not yet created
-        config = get_camera_config(camera_id)
+        # Camera exists but stream not yet created
         return {
             "camera_id": camera_id,
-            "camera_name": config.name,
+            "camera_name": camera_data.name,
             "is_running": False,
             "viewer_count": 0,
-            "ip_address": config.ip_address
+            "ip_address": camera_data.ip_address
         }
 
 
 @router.get("s")
-async def list_cameras() -> Dict[str, Any]:
+async def list_cameras(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     List all configured cameras and their current status.
     
@@ -170,22 +176,25 @@ async def list_cameras() -> Dict[str, Any]:
         Dictionary with camera IDs and their status
     """
     controller = get_camera_controller()
-    camera_ids = get_all_camera_ids()
+    db_cameras = await db_get_cameras(db)
+
     
     cameras = {}
-    for camera_id in camera_ids:
-        config = get_camera_config(camera_id)
-        stream = controller.get_stream(camera_id)
+    for camera in db_cameras:
+        camera_data = CameraBase.model_validate(camera, from_attributes=True)
+        stream = controller.get_stream(camera.camera_id, camera_data)
         
+        logger.info(f"Stream found for Camera ID: {camera.camera_id}: {stream is not None}")
         if stream:
-            cameras[camera_id] = stream.get_status()
+            logger.info(f"Camera {camera.camera_id} status: {stream.get_status()}")
+            cameras[camera.camera_id] = stream.get_status()
         else:
-            cameras[camera_id] = {
-                "camera_id": camera_id,
-                "camera_name": config.name,
+            cameras[camera.camera_id] = {
+                "camera_id": camera.camera_id,
+                "camera_name": camera_data.name,
                 "is_running": False,
                 "viewer_count": 0,
-                "ip_address": config.ip_address
+                "ip_address": camera_data.ip_address
             }
     
     return {
@@ -195,7 +204,7 @@ async def list_cameras() -> Dict[str, Any]:
 
 
 @router.post("/{camera_id}/cleanup")
-async def cleanup_camera(camera_id: str) -> Dict[str, str]:
+async def cleanup_camera(camera_id: int, db: AsyncSession = Depends(get_db)) -> Dict[str, str]:
     """
     Force cleanup of a camera stream (for administrative use).
     
@@ -207,14 +216,14 @@ async def cleanup_camera(camera_id: str) -> Dict[str, str]:
     Returns:
         Status message
     """
-    if not camera_exists(camera_id):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Camera '{camera_id}' not found in configuration"
-        )
+    db_camera = await db_get_camera(db, camera_id)
+    if not db_camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
     
+    camera_data = CameraBase.model_validate(db_camera, from_attributes=True)
+
     controller = get_camera_controller()
-    stream = controller.get_stream(camera_id)
+    stream = controller.get_stream(camera_id, camera_data)
     
     if stream and stream.is_running:
         stream._stop_stream()
@@ -223,3 +232,23 @@ async def cleanup_camera(camera_id: str) -> Dict[str, str]:
         return {"status": "success", "message": f"Camera {camera_id} was not running"}
 
 
+@router.post("/create", response_model=CameraCreateResponse, status_code=201)
+async def create_camera(
+    camera: CameraCreateRequest, 
+    db: AsyncSession = Depends(get_db)
+) -> CameraCreateResponse:
+    """
+    Create a new camera configuration.
+    
+    Args:
+        camera: CameraCreateRequest model with camera details
+        db: Async database session
+    
+    Returns:
+        CameraCreateResponse: Created camera with database-generated fields
+    """
+    new_camera = await db_create_camera(db, camera)
+    if not new_camera:
+        raise HTTPException(status_code=500, detail="Failed to create camera")
+    
+    return CameraCreateResponse.model_validate(new_camera, from_attributes=True)
