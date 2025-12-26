@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
 from database.models import Camera
-from models.camera import CameraBase, CameraUpdate, CameraCreateRequest
+from schemas.camera import CameraBase, CameraUpdate, CameraCreateRequest
 
 
 async def db_get_camera(db: AsyncSession, camera_id: int) -> Optional[Camera]:

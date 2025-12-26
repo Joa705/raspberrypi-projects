@@ -19,22 +19,20 @@ class CameraBase(BaseModel):
     description: str = Field(default="", description="Camera description", example="Main living room camera")
 
 
+class CameraStreamConfig(CameraBase):
+    """Model for camera stream configuration -- used internally by controller"""
+    camera_id: int = Field(..., description="Camera identifier", example=1)
+
+    class Config:
+        from_attributes = True
+        
+    
 class CameraCreateRequest(CameraBase):
     """Model for creating a new camera"""
     pass  # Inherits all fields from CameraBase
 
 
-class CameraUpdate(BaseModel):
-    """Model for updating an existing camera"""
-    name: Optional[str] = Field(None, description="Camera display name")
-    ip_address: Optional[str] = Field(None, description="Camera IP address")
-    username: Optional[str] = Field(None, description="Camera authentication username")
-    password: Optional[str] = Field(None, description="Camera authentication password")
-    stream_quality: Optional[str] = Field(None, description="Stream quality (stream1=HD, stream2=SD)")
-    description: Optional[str] = Field(None, description="Camera description")
-
-
-class CameraCreateResponse(CameraBase):
+class CameraResponse(CameraBase):
     """Model for camera response from database"""
     camera_id: int = Field(..., description="Auto-generated camera identifier", example=1)
     created_at: datetime = Field(..., description="Camera creation timestamp")
@@ -42,20 +40,19 @@ class CameraCreateResponse(CameraBase):
     
     class Config:
         from_attributes = True
+        
+        
+class CameraRuntimeStatus(BaseModel):
+    """Runtime state from CameraStream (in-memory only)"""
+    camera_id: int
+    is_running: bool
+    viewer_count: int
+    stream_type: str = "webrtc"  # "webrtc" or "hls" 
+    uptime_seconds: Optional[int] = None
+    last_frame_time: Optional[datetime] = None
+    peer_connection_count: int = 0  # Active WebRTC connections
 
 
-# keepings this as an example for future use
-class CameraStatusResponse(BaseModel):
-    """Response model for camera status"""
-    initialized: bool = Field(..., description="Whether camera is initialized", example=True)
-    streaming: bool = Field(..., description="Whether camera is currently streaming", example=False)
-    active: bool = Field(..., description="Whether camera is active", example=True)
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "initialized": True,
-                "streaming": False,
-                "active": True
-            }
-        }
+class CameraWithStatus(CameraResponse):
+    """Combined: static config + runtime status"""
+    status: CameraRuntimeStatus
