@@ -19,8 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from config import settings
-from models.system import SystemInfo
-from api import camera, heat, light
+from schemas.system import SystemInfo
+from api import camera
 from database.db import init_db
 
 logging.basicConfig(
@@ -77,9 +77,7 @@ app.add_middleware(
 )
 
 # Include API routers
-app.include_router(camera.router, prefix="/camera", tags=["Camera"])
-app.include_router(heat.router, prefix="/heat", tags=["Heat Sensor"])
-app.include_router(light.router, prefix="/light", tags=["Light"])
+app.include_router(camera.router, prefix="/cameras", tags=["Camera"])
 
 # Root endpoint
 @app.get("/")

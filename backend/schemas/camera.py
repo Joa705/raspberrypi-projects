@@ -59,10 +59,20 @@ class CameraRuntimeStatus(BaseModel):
     viewer_count: int
     stream_type: str = "webrtc"  # "webrtc" or "hls" 
     uptime_seconds: Optional[int] = None
-    last_frame_time: Optional[datetime] = None
     peer_connection_count: int = 0  # Active WebRTC connections
 
 
 class CameraWithStatus(CameraResponse):
     """Combined: static config + runtime status"""
     status: CameraRuntimeStatus
+
+
+class WebRTCOffer(BaseModel):
+    """WebRTC offer from client"""
+    sdp: str = Field(..., description="Session Description Protocol offer")
+    type: str = Field(..., description="SDP type", example="offer")
+
+class WebRTCAnswer(BaseModel):
+    """WebRTC answer from server"""
+    sdp: str = Field(..., description="Session Description Protocol answer")
+    type: str = Field(..., description="SDP type", example="answer")

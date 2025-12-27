@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "Raspberry Pi FastAPI backend"
     debug: bool = False
     
-    host: str = "0.0.0.0"
+    host: str = "localhost"
     port: int = 8000
     
     database_url: str = "sqlite+aiosqlite:///./database/sqlite.db"

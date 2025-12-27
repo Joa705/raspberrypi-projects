@@ -1,326 +1,229 @@
-"""
-Camera Controller Module
-
-This module provides high-level camera control logic for managing
-multiple Tapo camera RTSP streams with viewer-based lifecycle management.
-
-Features:
-- Manages multiple camera streams simultaneously
-- Lazy initialization: streams start only when first viewer connects
-- Automatic cleanup: streams stop when last viewer disconnects
-- Singleton pattern: multiple viewers share the same stream instance
-- Thread-safe viewer counting
-"""
-
-import logging
 import threading
+import subprocess
+import logging
 import time
-import cv2
-from typing import Dict, Optional
-from queue import Queue, Empty
+from typing import Optional, List
+from datetime import datetime
+from aiortc.contrib.media import MediaPlayer
 
-from models.camera import CameraBase
+# Project imports
+from schemas.camera import CameraStreamConfig, CameraRuntimeStatus
 
 logger = logging.getLogger(__name__)
 
+
+def build_rtsp_url(camera: CameraStreamConfig) -> str:
+    """Construct RTSP URL from camera details"""
+    return f"rtsp://{camera.username}:{camera.password}@{camera.ip_address}:554/{camera.stream_quality}"
+
+
 class CameraStream:
-    """
-    Manages a single camera RTSP stream with multiple viewers.
+    """Manages a single camera stream with WebRTC support"""
     
-    The stream starts when the first viewer connects and stops
-    when the last viewer disconnects.
-    """
-    
-    def __init__(self, camera_id: int, camera_data: CameraBase):
-        """
-        Initialize camera stream manager
+    def __init__(self, camera_config: CameraStreamConfig):
+        # Static config
+        self.camera_id = camera_config.camera_id
+        self.name = camera_config.name
+        self.ip_address = camera_config.ip_address
+        self.username = camera_config.username
+        self.password = camera_config.password
+        self.stream_quality = camera_config.stream_quality
         
-        Args:
-            camera_id: Database ID of the camera
-            name: Camera display name
-            ip_address: Camera IP address
-            username: RTSP authentication username
-            password: RTSP authentication password
-            stream_quality: Stream quality (stream1=HD, stream2=SD)
-        """
-        self.camera_id = camera_id
-        self.name = camera_data.name
-        self.ip_address = camera_data.ip_address
-        self.username = camera_data.username
-        self.password = camera_data.password
-        self.stream_quality = camera_data.stream_quality
+        self.rtsp_url = build_rtsp_url(camera_config)
         
-        # RTSP URL construction
-        self.rtsp_url = (
-            f"rtsp://{self.username}:{self.password}"
-            f"@{self.ip_address}:554/{self.stream_quality}"
-        )
-        
-        # Stream state
-        self.capture: Optional[cv2.VideoCapture] = None
+        # Runtime state (in-memory)
         self.is_running = False
         self.viewer_count = 0
+        self.peer_connections: List = []  # List of RTCPeerConnection
+        self.media_player: Optional[MediaPlayer] = None  # MediaPlayer handles FFmpeg internally
+        self.video_track = None  # MediaStreamTrack
+        self.start_time: Optional[float] = None
         self.lock = threading.Lock()
-        self.thread: Optional[threading.Thread] = None
         
-        # Frame buffer for viewers
-        self.current_frame = None
-        self.frame_lock = threading.Lock()
-        
-        logger.info(f"Camera stream manager created for {camera_id} ({self.name})")
-        
-    def add_viewer(self) -> bool:
-        """
-        Add a viewer to this stream. Starts the stream if this is the first viewer.
-        Returns True if successful.
-        """
-        with self.lock:
-            self.viewer_count += 1
-            logger.info(f"Camera {self.camera_id}: Viewer added (total: {self.viewer_count})")
-            
-            if self.viewer_count == 1 and not self.is_running:
-                # First viewer - start the stream
-                return self._start_stream()
-            
-            return self.is_running
-    
-    def remove_viewer(self):
-        """
-        Remove a viewer from this stream. Stops the stream if this was the last viewer.
-        """
-        with self.lock:
-            self.viewer_count = max(0, self.viewer_count - 1)
-            logger.info(f"Camera {self.camera_id}: Viewer removed (remaining: {self.viewer_count})")
-            
-            if self.viewer_count == 0 and self.is_running:
-                # Last viewer disconnected - stop the stream
-                self._stop_stream()
+        logger.info(f"Camera {self.camera_id} ({self.name}): CameraStream initialized")
     
     def _start_stream(self) -> bool:
-        """Start the camera stream (internal method, assumes lock is held)"""
-        if self.is_running:
+        """Start stream using MediaPlayer (handles FFmpeg internally)"""
+        if self.media_player is not None:
+            logger.warning(f"Camera {self.camera_id}: Stream already running")
             return True
         
         try:
-            logger.info(f"Camera {self.camera_id}: Starting RTSP stream from {self.ip_address}")
+            logger.info(f"Camera {self.camera_id}: Starting stream from {self.rtsp_url}")
             
-            # Initialize OpenCV capture
-            self.capture = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
+            # MediaPlayer handles FFmpeg internally - much simpler!
+            self.media_player = MediaPlayer(
+                self.rtsp_url,
+                format='rtsp',
+                options={
+                    'rtsp_transport': 'udp',
+                    'fflags': 'nobuffer',
+                    'flags': 'low_delay',
+                    'probesize': '32',
+                    'analyzeduration': '0',
+                    'max_delay': '500000',        # 500ms max delay (microseconds)
+                    'reorder_queue_size': '0',    # Don't reorder packets
+                    'buffer_size': '512000',      # Larger network buffer (512KB)
+                }
+            )
             
-            # Aggressive latency reduction settings - disable buffering completely
-            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 0)  # No buffering for real-time
-            self.capture.set(cv2.CAP_PROP_FPS, 15)  # Limit to 15 FPS
-            self.capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
-            
-            # Test connection
-            ret, frame = self.capture.read()
-            if not ret:
-                raise Exception("Failed to read initial frame from camera")
+            # Get video track from MediaPlayer
+            self.video_track = self.media_player.video
             
             self.is_running = True
-            
-            # Start capture thread
-            self.thread = threading.Thread(target=self._capture_loop, daemon=True)
-            self.thread.start()
+            self.start_time = time.time()
             
             logger.info(f"Camera {self.camera_id}: Stream started successfully")
             return True
             
         except Exception as e:
             logger.error(f"Camera {self.camera_id}: Failed to start stream: {e}")
-            if self.capture:
-                self.capture.release()
-                self.capture = None
+            self.media_player = None
+            self.video_track = None
+            self.is_running = False
             return False
     
-    def _stop_stream(self):
-        """Stop the camera stream (internal method, assumes lock is held)"""
-        if not self.is_running:
-            return
+    def _stop_stream(self) -> bool:
+        """Stop MediaPlayer stream"""
+        if self.media_player is None:
+            logger.debug(f"Camera {self.camera_id}: Stream not running")
+            return True
         
-        logger.info(f"Camera {self.camera_id}: Stopping stream")
-        self.is_running = False
-        
-        # Wait for thread to finish
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
-        
-        # Release capture
-        if self.capture:
-            self.capture.release()
-            self.capture = None
-        
-        # Clear frame buffer
-        with self.frame_lock:
-            self.current_frame = None
-        
-        logger.info(f"Camera {self.camera_id}: Stream stopped")
-    
-    def _capture_loop(self):
-        """
-        Continuous capture loop that runs in a separate thread.
-        Aggressively skips old buffered frames to maintain real-time streaming.
-        """
-        error_count = 0
-        max_errors = 10
-        
-        logger.info(f"Camera {self.camera_id}: Capture loop started")
-        
-        while self.is_running:
-            try:
-                if not self.capture or not self.capture.isOpened():
-                    logger.warning(f"Camera {self.camera_id}: Capture not opened, reconnecting...")
-                    time.sleep(2)
-                    continue
-                
-                # Flush old buffered frames by grabbing without retrieving
-                # This discards old frames to get the latest one
-                for _ in range(3):  # Skip up to 3 buffered frames
-                    self.capture.grab()
-                
-                # Now retrieve the latest frame after flushing buffer
-                ret, frame = self.capture.retrieve()
-                
-                if not ret:
-                    error_count += 1
-                    if error_count >= max_errors:
-                        logger.error(f"Camera {self.camera_id}: Too many read errors, attempting reconnect")
-                        self.capture.release()
-                        time.sleep(2)
-                        self.capture = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
-                        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 0)  # No buffering
-                        self.capture.set(cv2.CAP_PROP_FPS, 15)
-                        error_count = 0
-                    time.sleep(0.01)
-                    continue
-                
-                # Successfully read frame
-                error_count = 0
-                
-                # Update shared frame buffer with latest frame
-                with self.frame_lock:
-                    self.current_frame = frame
-                
-                # Minimal delay for fast frame capture
-                time.sleep(0.033)  # ~30 FPS capture rate
-                
-            except Exception as e:
-                logger.error(f"Camera {self.camera_id}: Error in capture loop: {e}")
-                error_count += 1
-                time.sleep(0.1)
-        
-        logger.info(f"Camera {self.camera_id}: Capture loop ended")
-    
-    def get_frame(self) -> Optional[bytes]:
-        """
-        Get the current frame as JPEG bytes.
-        Returns None if no frame is available.
-        """
-        with self.frame_lock:
-            if self.current_frame is None:
-                return None
+        try:
+            logger.info(f"Camera {self.camera_id}: Stopping stream")
             
-            # Encode frame as JPEG with lower quality for faster encoding
-            ret, buffer = cv2.imencode('.jpg', self.current_frame, 
-                                      [cv2.IMWRITE_JPEG_QUALITY, 50])
-            if not ret:
-                return None
+            # Stop video track
+            if self.video_track:
+                self.video_track.stop()
+                self.video_track = None
             
-            return buffer.tobytes()
+            # MediaPlayer cleanup is handled automatically
+            self.media_player = None
+            self.is_running = False
+            self.start_time = None
+            
+            logger.info(f"Camera {self.camera_id}: Stream stopped")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Camera {self.camera_id}: Error stopping stream: {e}")
+            return False
     
-    def get_status(self) -> dict:
-        """Get current stream status"""
+    def add_peer_connection(self, pc) -> None:
+        """Add a WebRTC peer connection"""
         with self.lock:
-            return {
-                "camera_id": self.camera_id,
-                "camera_name": self.name,
-                "is_running": self.is_running,
-                "viewer_count": self.viewer_count,
-                "ip_address": self.ip_address
-            }
+            self.peer_connections.append(pc)
+            logger.info(f"Camera {self.camera_id}: Added peer connection (total: {len(self.peer_connections)})")
+    
+    def remove_peer_connection(self, pc) -> None:
+        """Remove a WebRTC peer connection"""
+        with self.lock:
+            if pc in self.peer_connections:
+                self.peer_connections.remove(pc)
+                logger.info(f"Camera {self.camera_id}: Removed peer connection (total: {len(self.peer_connections)})")
+    
+    def add_viewer(self) -> bool:
+        """Increment viewer count and start stream if first viewer"""
+        with self.lock:
+            self.viewer_count += 1
+            logger.info(f"Camera {self.camera_id}: Viewer joined (count: {self.viewer_count})")
+            
+            # Start stream only if this is the first viewer
+            if self.viewer_count == 1 and not self.is_running:
+                logger.info(f"Camera {self.camera_id}: First viewer, starting stream")
+                return self._start_stream()
+            
+            return True
+    
+    def remove_viewer(self) -> bool:
+        """Decrement viewer count and stop stream if last viewer left"""
+        with self.lock:
+            if self.viewer_count > 0:
+                self.viewer_count -= 1
+                logger.info(f"Camera {self.camera_id}: Viewer left (count: {self.viewer_count})")
+                
+                # Stop stream if no viewers remain
+                if self.viewer_count == 0 and self.is_running:
+                    logger.info(f"Camera {self.camera_id}: No viewers, stopping stream")
+                    return self._stop_stream()
+            
+            return True
+    
+    def get_status(self) -> CameraRuntimeStatus:
+        """Get current runtime status"""
+        with self.lock:
+            uptime_seconds = None
+            if self.start_time is not None:
+                uptime_seconds = int(time.time() - self.start_time)
+            
+            return CameraRuntimeStatus(
+                camera_id=self.camera_id,
+                is_running=self.is_running,
+                viewer_count=self.viewer_count,
+                stream_type="webrtc",
+                uptime_seconds=uptime_seconds,
+                peer_connection_count=len(self.peer_connections)
+            )
+    
+    def cleanup(self) -> None:
+        """Cleanup resources when removing camera"""
+        logger.info(f"Camera {self.camera_id}: Cleaning up")
+        
+        # Close all peer connections
+        for pc in self.peer_connections:
+            try:
+                pc.close()
+            except Exception as e:
+                logger.error(f"Camera {self.camera_id}: Error closing peer connection: {e}")
+        
+        self.peer_connections.clear()
+        
+        # Stop stream
+        self._stop_stream()
 
 
 class CameraController:
-    """
-    Central controller for managing multiple camera streams.
+    """Singleton controller for managing all camera streams"""
     
-    Maintains a singleton instance of each camera stream and manages
-    their lifecycle based on viewer connections.
-    """
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
     
     def __init__(self):
-        """Initialize the camera controller"""
-        self.streams: Dict[str, CameraStream] = {}
-        self.lock = threading.Lock()
-        logger.info("Camera controller initialized")
+        if not hasattr(self, 'initialized'):
+            self.streams: dict[int, CameraStream] = {}
+            self.streams_lock = threading.Lock()
+            self.initialized = True
+            logger.info("CameraController initialized")
     
-    def get_stream(self, camera_id: int, camera_data: CameraBase = None) -> Optional[CameraStream]:
-        """
-        Get or create a stream for the specified camera.
-        
-        Args:
-            camera_id: Database ID of the camera
-            camera_data: Dict with keys: name, ip_address, username, password, stream_quality
-                        Required when creating a new stream
-        
-        Returns:
-            CameraStream instance or None if camera_data not provided for new stream
-        """
-        with self.lock:
+    def get_camera(self, camera_config: CameraStreamConfig) -> CameraStream:
+        """Get or create a camera stream"""
+        with self.streams_lock:
+            camera_id = camera_config.camera_id
+            
             if camera_id not in self.streams:
-                # Need camera data to create new stream
-                if camera_data is None:
-                    logger.warning(f"Camera {camera_id} not found and no data provided")
-                    return None
-                
-                # Create new stream manager with provided data
-                self.streams[camera_id] = CameraStream(camera_id=camera_id, camera_data=camera_data)   
+                logger.info(f"Creating new CameraStream for camera {camera_id}")
+                self.streams[camera_id] = CameraStream(camera_config)
+            
             return self.streams[camera_id]
     
-    def cleanup_inactive_streams(self):
-        """
-        Remove stream instances that are not running and have no viewers.
-        This is called periodically to free resources.
-        """
-        with self.lock:
-            to_remove = []
-            for camera_id, stream in self.streams.items():
-                if not stream.is_running and stream.viewer_count == 0:
-                    to_remove.append(camera_id)
-            
-            for camera_id in to_remove:
-                logger.info(f"Removing inactive stream: {camera_id}")
+    def remove_camera(self, camera_id: int) -> bool:
+        """Remove and cleanup a camera stream"""
+        with self.streams_lock:
+            if camera_id in self.streams:
+                logger.info(f"Removing camera {camera_id}")
+                stream = self.streams[camera_id]
+                stream.cleanup()
                 del self.streams[camera_id]
+                return True
+            return False
     
-    def get_all_status(self) -> dict:
-        """Get status of all active streams"""
-        with self.lock:
-            return {
-                camera_id: stream.get_status()
-                for camera_id, stream in self.streams.items()
-            }
-    
-    def shutdown(self):
-        """Shutdown all streams"""
-        logger.info("Shutting down camera controller")
-        with self.lock:
-            for stream in self.streams.values():
-                stream._stop_stream()
-            self.streams.clear()
 
-
-# Global controller instance
-_controller: Optional[CameraController] = None
-_controller_lock = threading.Lock()
-
-
-def get_camera_controller() -> CameraController:
-    """Get the global camera controller instance (singleton)"""
-    global _controller
-    
-    if _controller is None:
-        with _controller_lock:
-            if _controller is None:
-                _controller = CameraController()
-    
-    return _controller
+# Singleton instance 
+camera_controller = CameraController()
