@@ -19,6 +19,16 @@ class CameraBase(BaseModel):
     description: str = Field(default="", description="Camera description", example="Main living room camera")
 
 
+class CameraResponse(CameraBase):
+    """Model for camera response from database"""
+    camera_id: int = Field(..., description="Auto-generated camera identifier", example=1)
+    created_at: datetime = Field(..., description="Camera creation timestamp")
+    updated_at: datetime = Field(..., description="Camera last update timestamp")
+    
+    class Config:
+        from_attributes = True
+        
+
 class CameraStreamConfig(CameraBase):
     """Model for camera stream configuration -- used internally by controller"""
     camera_id: int = Field(..., description="Camera identifier", example=1)
@@ -32,14 +42,14 @@ class CameraCreateRequest(CameraBase):
     pass  # Inherits all fields from CameraBase
 
 
-class CameraResponse(CameraBase):
-    """Model for camera response from database"""
-    camera_id: int = Field(..., description="Auto-generated camera identifier", example=1)
-    created_at: datetime = Field(..., description="Camera creation timestamp")
-    updated_at: datetime = Field(..., description="Camera last update timestamp")
-    
-    class Config:
-        from_attributes = True
+class CameraUpdate(BaseModel):
+    """Model for updating a camera - all fields optional"""
+    name: Optional[str] = None
+    ip_address: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    stream_quality: Optional[str] = None
+    description: Optional[str] = None
         
         
 class CameraRuntimeStatus(BaseModel):
