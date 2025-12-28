@@ -27,6 +27,12 @@ greenlet>=3.0.0  # Required for SQLAlchemy async operations
 # Environment Variables
 python-dotenv==1.0.0
 
+# Authentication
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+python-jose[cryptography]
+python-multipart
+
 # Optional: Add these when ready to connect real hardware
 # RPi.GPIO==0.7.1  # For GPIO control (relay, sensors)
 # picamera2  # For Raspberry Pi camera

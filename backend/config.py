@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     
     log_level: str = "INFO"
     
+    admin_username: str = "admin"
+    admin_email: str = "admin@example.com"
+    admin_password: str = "admin"
+    
+    secret_key: str = "your_secret_key"
+    algorithm: str = "HS256"
+    access_token_expire_hours: int = 12
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

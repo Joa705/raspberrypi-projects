@@ -13,15 +13,18 @@ import sys
 import psutil
 import time
 from datetime import datetime
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 
+# Project imports
 from config import settings
 from schemas.system import SystemInfo
 from api import camera
 from database.db import init_db
+
+load_dotenv()
 
 logging.basicConfig(
     level=settings.log_level,
