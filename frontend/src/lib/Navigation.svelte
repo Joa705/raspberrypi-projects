@@ -23,6 +23,14 @@
         <span class="icon">🎥</span>
         Cameras
       </button>
+      <button 
+        class="nav-link" 
+        class:active={currentPage === 'stream'}
+        on:click={() => onNavigate('stream')}
+      >
+        <span class="icon">📹</span>
+        Stream
+      </button>
     </div>
   </div>
 </nav>
