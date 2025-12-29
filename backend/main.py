@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 # Project imports
 from config import settings
 from schemas.system import SystemInfo
-from api import camera
+from api import camera, user, auth
 from database.db import init_db
 
 load_dotenv()
@@ -56,16 +56,16 @@ app = FastAPI(
     },
     openapi_tags=[
         {
-            "name": "Camera",
+            "name": "Cameras",
             "description": "Operations for camera control, including snapshots and streaming",
         },
         {
-            "name": "Heat Sensor",
-            "description": "Temperature and humidity sensor readings",
+            "name": "Auth",
+            "description": "Authentication and user management",
         },
         {
-            "name": "Light",
-            "description": "Control relay-connected lights (on/off/toggle)",
+            "name": "Users",
+            "description": "User management operations (admin only)",
         },
     ]
 )
@@ -80,7 +80,9 @@ app.add_middleware(
 )
 
 # Include API routers
-app.include_router(camera.router, prefix="/cameras", tags=["Camera"])
+app.include_router(camera.router, prefix="/cameras", tags=["Cameras"])
+app.include_router(user.router, prefix="/users", tags=["Users"])
+app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 
 # Root endpoint
 @app.get("/")
@@ -159,8 +161,8 @@ async def system_info():
     uptime_hours = uptime_seconds / 3600
     
     # Camera stream information
-    from modules.camera.controller import get_camera_controller
-    controller = get_camera_controller()
+    from modules.camera.controller import camera_controller
+    controller = camera_controller
     camera_stats = controller.get_all_status()
     total_viewers = sum(cam['viewer_count'] for cam in camera_stats.values())
     active_streams = sum(1 for cam in camera_stats.values() if cam['is_running'])

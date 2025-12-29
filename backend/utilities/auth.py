@@ -43,19 +43,14 @@ def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     to_encode.update({"exp": expire})
+    
+    # Convert user_id to string if it's the "sub" claim
+    if "sub" in to_encode and isinstance(to_encode["sub"], int):
+        to_encode["sub"] = str(to_encode["sub"])
+    
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> Optional[int]:
-    """Decode JWT token and return user_id. Returns None if invalid."""
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
-        return user_id
-    except JWTError:
-        return None
-    
-    
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db)
@@ -64,7 +59,7 @@ async def get_current_user(
     import crud.user as user_crud
     
     # Decode token (pure, testable)
-    user_id = decode_access_token(credentials.credentials)
+    user_id = _decode_access_token(credentials.credentials)
     
     if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -76,3 +71,25 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="User not found or inactive")
     
     return user
+
+
+
+# Internal functions #
+def _decode_access_token(token: str) -> Optional[int]:
+    """Decode JWT token and return user_id. Returns None if invalid."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        logger.info(f"Decoded payload: {payload}")
+        
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
+            logger.error("No 'sub' claim in token")
+            return None
+        
+        # Convert string back to int
+        user_id = int(user_id_str)
+        logger.info(f"Extracted user_id: {user_id}")
+        return user_id
+    except (JWTError, ValueError) as e:
+        logger.error(f"JWT decode error: {e}")
+        return None

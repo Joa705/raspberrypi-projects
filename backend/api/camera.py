@@ -8,8 +8,9 @@ from database.db import get_db
 import crud.camera as camera_crud
 from modules.camera.controller import camera_controller
 from schemas.camera import CameraCreateRequest, CameraResponse, WebRTCOffer, WebRTCAnswer
+from utilities.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 logger = logging.getLogger(__name__)
 
 @router.post("/{camera_id}/webrtc/offer", response_model=WebRTCAnswer)
