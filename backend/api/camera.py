@@ -127,3 +127,28 @@ async def get_camera_statuses(db: AsyncSession = Depends(get_db)) -> list[Camera
         results.append(camera_with_status)
     
     return results
+
+@router.get("/{camera_id}/status", response_model=CameraRuntimeStatus)
+async def get_camera_status(
+    camera_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> CameraRuntimeStatus:
+    """Get runtime status for a specific camera"""
+    # Check camera exists
+    camera = await camera_crud.get_camera(db, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    # Get status from controller
+    if camera_id in camera_controller.streams:
+        stream = camera_controller.streams[camera_id]
+        return stream.get_status()
+    else:
+        return CameraRuntimeStatus(
+            camera_id=camera_id,
+            is_running=False,
+            viewer_count=0,
+            stream_type="webrtc",
+            uptime_seconds=None,
+            peer_connection_count=0
+        )

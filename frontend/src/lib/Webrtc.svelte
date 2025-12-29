@@ -1,233 +1,119 @@
 <script>
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount } from 'svelte';
+    import { fetchCamerasStatuses } from './api.js';
+    import CameraCard from './CameraCard.svelte';
     
-    export let cameraId = 1; // Camera ID to stream
-    export let apiUrl = 'http://localhost:8000'; // Backend URL
-    
-    let videoElement;
-    let pc = null;
-    let isConnected = false;
-    let isConnecting = false;
+    let cameras = [];
+    let loading = true;
     let error = null;
-    let connectionState = 'disconnected';
     
-    async function startStream() {
+    async function loadCameras() {
         try {
+            loading = true;
             error = null;
-            isConnecting = true;
-            connectionState = 'connecting';
-            
-            // Create peer connection
-            pc = new RTCPeerConnection({
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' }
-                ]
-            });
-            
-            // Handle incoming video track
-            pc.ontrack = (event) => {
-                console.log('Received video track');
-                if (videoElement) {
-                    videoElement.srcObject = event.streams[0];
-                }
-                isConnected = true;
-                isConnecting = false;
-            };
-            
-            // Handle connection state changes
-            pc.onconnectionstatechange = () => {
-                connectionState = pc.connectionState;
-                console.log('Connection state:', pc.connectionState);
-                
-                if (pc.connectionState === 'connected') {
-                    isConnected = true;
-                    isConnecting = false;
-                } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-                    isConnected = false;
-                    isConnecting = false;
-                    error = 'Connection failed or closed';
-                }
-            };
-            
-            // Handle ICE connection state
-            pc.oniceconnectionstatechange = () => {
-                console.log('ICE connection state:', pc.iceConnectionState);
-            };
-            
-            // Add transceiver for receiving video only
-            pc.addTransceiver('video', { direction: 'recvonly' });
-            
-            // Create offer
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            
-            console.log('Sending offer to server...');
-            
-            // Send offer to server
-            const response = await fetch(`${apiUrl}/cameras/${cameraId}/webrtc/offer`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    sdp: pc.localDescription.sdp,
-                    type: pc.localDescription.type
-                })
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-                throw new Error(errorData.detail || `Server error: ${response.status}`);
-            }
-            
-            const answer = await response.json();
-            console.log('Received answer from server');
-            
-            // Set remote description (server's answer)
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            
-            console.log('WebRTC connection established');
-            
+            cameras = await fetchCamerasStatuses();
         } catch (err) {
-            console.error('Error starting stream:', err);
+            console.error('Error loading cameras:', err);
             error = err.message;
-            isConnecting = false;
-            isConnected = false;
-            
-            if (pc) {
-                pc.close();
-                pc = null;
-            }
+        } finally {
+            loading = false;
         }
     }
     
-    async function stopStream() {
-        isConnecting = true;
-        
-        if (pc) {
-            // Close peer connection gracefully
-            pc.close();
-            pc = null;
-        }
-        
-        if (videoElement) {
-            videoElement.srcObject = null;
-        }
-        
-        isConnected = false;
-        isConnecting = false;
-        connectionState = 'disconnected';
-        error = null;
-    }
-        
-    // Cleanup on component destroy
-    onDestroy(() => {
-        stopStream();
+    onMount(() => {
+        loadCameras();
     });
 </script>
 
-<div class="webrtc-container">
-    <div class="video-wrapper">
-        <video 
-            bind:this={videoElement}
-            autoplay 
-            playsinline
-            muted={false} 
-            controls
-            class="video-element"
-        >
-            <track kind="captions" />
-        </video>
-        
-        {#if !isConnected && !isConnecting}
-            <div class="video-overlay">
-                <p>Click "Start Stream" to begin</p>
-            </div>
-        {/if}
-        
-        {#if isConnecting}
-            <div class="video-overlay">
-                <div class="spinner"></div>
-                <p>Connecting...</p>
-            </div>
-        {/if}
+<div class="cameras-container">
+    <div class="header">
+        <h2>Camera Streams</h2>
+        <button on:click={loadCameras} class="btn-refresh" disabled={loading}>
+            {loading ? '🔄 Loading...' : '🔄 Refresh'}
+        </button>
     </div>
     
-    <div class="controls">
-        {#if !isConnected && !isConnecting}
-            <button on:click={startStream} class="btn btn-primary">
-                Start Stream
-            </button>
-        {:else if isConnected}
-            <button on:click={stopStream} class="btn btn-danger">
-                Stop Stream
-            </button>
-        {/if}
-        
-        <div class="status">
-            <span class="status-indicator status-{connectionState}"></span>
-            <span class="status-text">
-                {#if isConnecting}
-                    Connecting...
-                {:else if isConnected}
-                    Connected
-                {:else}
-                    Disconnected
-                {/if}
-            </span>
+    {#if loading}
+        <div class="loading">
+            <div class="spinner-large"></div>
+            <p>Loading cameras...</p>
         </div>
-    </div>
-    
-    {#if error}
-        <div class="error-message">
-            <strong>Error:</strong> {error}
+    {:else if error}
+        <div class="error-box">
+            <strong>Error loading cameras:</strong> {error}
+            <button on:click={loadCameras} class="btn-retry">Try Again</button>
+        </div>
+    {:else if cameras.length === 0}
+        <div class="empty-state">
+            <p>No cameras configured yet.</p>
+            <p class="hint">Add cameras to start streaming.</p>
+        </div>
+    {:else}
+        <div class="cameras-grid">
+            {#each cameras as camera (camera.camera_id)}
+                <CameraCard {camera} />
+            {/each}
         </div>
     {/if}
 </div>
 
 <style>
-    .webrtc-container {
-        width: 100%;
-        max-width: 800px;
+    .cameras-container {
+        padding: 2rem;
+        max-width: 1400px;
         margin: 0 auto;
     }
     
-    .video-wrapper {
-        position: relative;
-        width: 100%;
-        background: #000;
-        border-radius: 8px;
-        overflow: hidden;
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
     }
     
-    .video-element {
-        width: 100%;
-        height: auto;
-        display: block;
-        background: #000;
+    .header h2 {
+        font-size: 2rem;
+        color: #333;
+        margin: 0;
     }
     
-    .video-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
+    .btn-refresh {
+        padding: 0.5rem 1rem;
+        background: white;
+        border: 2px solid #667eea;
+        color: #667eea;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    
+    .btn-refresh:hover:not(:disabled) {
+        background: #667eea;
+        color: white;
+    }
+    
+    .btn-refresh:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    
+    .loading {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        color: white;
-        font-size: 1.2rem;
+        padding: 4rem 2rem;
+        color: #666;
     }
     
-    .spinner {
-        border: 4px solid rgba(255, 255, 255, 0.3);
-        border-top: 4px solid white;
+    .spinner-large {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
         border-radius: 50%;
-        width: 40px;
-        height: 40px;
+        width: 60px;
+        height: 60px;
         animation: spin 1s linear infinite;
         margin-bottom: 1rem;
     }
@@ -237,87 +123,57 @@
         100% { transform: rotate(360deg); }
     }
     
-    .controls {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        margin-top: 1rem;
-        padding: 1rem;
-        background: #f5f5f5;
+    .error-box {
+        padding: 2rem;
+        background: #ffebee;
+        color: #c62828;
         border-radius: 8px;
+        border-left: 4px solid #f44336;
+        text-align: center;
     }
     
-    .btn {
+    .btn-retry {
+        margin-top: 1rem;
         padding: 0.5rem 1.5rem;
+        background: #f44336;
+        color: white;
         border: none;
-        border-radius: 4px;
-        font-size: 1rem;
+        border-radius: 6px;
         cursor: pointer;
-        transition: opacity 0.2s;
+        font-weight: 600;
     }
     
-    .btn:hover {
-        opacity: 0.8;
-    }
-    
-    .btn-primary {
-        background: #4CAF50;
-        color: white;
-    }
-    
-    .btn-danger {
-        background: #f44336;
-        color: white;
-    }
-    
-    .status {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-left: auto;
-    }
-    
-    .status-indicator {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #999;
-    }
-    
-    .status-indicator.status-connecting {
-        background: #FFC107;
-        animation: pulse 1.5s infinite;
-    }
-    
-    .status-indicator.status-connected {
-        background: #4CAF50;
-    }
-    
-    .status-indicator.status-disconnected {
-        background: #999;
-    }
-    
-    .status-indicator.status-failed,
-    .status-indicator.status-closed {
-        background: #f44336;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    
-    .status-text {
-        font-size: 0.9rem;
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
         color: #666;
     }
     
-    .error-message {
-        margin-top: 1rem;
-        padding: 1rem;
-        background: #ffebee;
-        color: #c62828;
-        border-radius: 4px;
-        border-left: 4px solid #f44336;
+    .empty-state p {
+        margin: 0.5rem 0;
+        font-size: 1.1rem;
+    }
+    
+    .hint {
+        color: #999;
+        font-size: 0.9rem !important;
+    }
+    
+    .cameras-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+        gap: 2rem;
+    }
+    
+    @media (max-width: 768px) {
+        .cameras-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .header {
+            flex-direction: column;
+            gap: 1rem;
+            align-items: stretch;
+        }
     }
 </style>
