@@ -1,10 +1,9 @@
 <script>
     import { onDestroy, onMount } from 'svelte';
-    import { fetchCameraStatus } from './api.js';
+    import { fetchCameraStatus, API_BASE } from './api.js';
     
     export let camera; // Camera object with config and status
-    export let apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    
+
     let videoElement;
     let pc = null;
     let isConnected = false;
@@ -84,7 +83,7 @@
             console.log(`Camera ${camera.camera_id}: Sending offer to server...`);
             
             // Send offer to server
-            const response = await fetch(`${apiUrl}/cameras/${camera.camera_id}/webrtc/offer`, {
+            const response = await fetch(`${API_BASE}/cameras/${camera.camera_id}/webrtc/offer`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({

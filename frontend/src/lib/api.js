@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE = import.meta.env.VITE_API_URL || '/py';
 
 function getAuthHeaders() {
   const token = localStorage.getItem('token');
@@ -45,6 +45,26 @@ export async function cleanupCamera(cameraId) {
   });
   if (!response.ok) {
     throw new Error('Failed to cleanup camera');
+  }
+  return response.json();
+}
+
+export async function login(username, password) { 
+  // OAuth2 password flow requires form data
+  const formData = new URLSearchParams();
+  formData.append('username', username);
+  formData.append('password', password);
+
+  const response = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error('Login failed');
   }
   return response.json();
 }

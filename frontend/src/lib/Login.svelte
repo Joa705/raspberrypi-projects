@@ -1,13 +1,13 @@
 <script>
   import { push } from 'svelte-spa-router';
   import { auth } from './auth.svelte.js';
+  import {login} from './api.js';
 
   let username = '';
   let password = '';
   let error = '';
   let loading = false;
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -15,29 +15,11 @@
     loading = true;
 
     try {
-      // OAuth2 password flow requires form data
-      const formData = new URLSearchParams();
-      formData.append('username', username);
-      formData.append('password', password);
-
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formData
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        auth.login(data.access_token);
-        push('/home');
-      } else {
-        error = data.detail || 'Login failed';
-      }
+      const data = await login(username, password);
+      auth.login(data.access_token, data.is_admin);
+      push('/home');
     } catch (err) {
-      error = 'Network error. Please check your connection.';
+      error = err.message || 'Network error. Please check your connection.';
       console.error('Login error:', err);
     } finally {
       loading = false;
@@ -87,10 +69,6 @@
         {loading ? 'Logging in...' : 'Login'}
       </button>
     </form>
-
-    <div class="login-footer">
-      <p>Default admin credentials: admin / admin</p>
-    </div>
   </div>
 </div>
 
@@ -198,16 +176,6 @@
     transform: none;
   }
 
-  .login-footer {
-    margin-top: 2rem;
-    text-align: center;
-    color: #666;
-    font-size: 0.85rem;
-  }
-
-  .login-footer p {
-    margin: 0;
-  }
 
   @media (max-width: 768px) {
     .login-card {
