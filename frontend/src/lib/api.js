@@ -16,10 +16,6 @@ export async function fetchCameras() {
   return response.json();
 }
 
-export function getCameraStreamUrl(cameraId) {
-  const timestamp = new Date().getTime();
-  return `${API_BASE}/camera/${cameraId}/stream?t=${timestamp}`;
-}
 
 export async function cleanupCamera(cameraId) {
   const response = await fetch(`${API_BASE}/camera/${cameraId}/cleanup`, {

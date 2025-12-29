@@ -1,32 +1,50 @@
 <script>
+  import { onMount } from 'svelte';
+  import { push } from 'svelte-spa-router';
+  import Router from 'svelte-spa-router';
+  import { auth } from './lib/auth.svelte.js';
+  import Login from './lib/Login.svelte';
   import Navigation from './lib/Navigation.svelte'
   import SystemInfo from './lib/SystemInfo.svelte'
-  import Cameras from './lib/Cameras.svelte'
   import Webrtc from './lib/Webrtc.svelte'
 
-  let currentPage = 'home';
+  // Initialize auth from localStorage on mount
+  onMount(() => {
+    auth.init();
+    // Redirect to login if not authenticated
+    if (!auth.isAuthenticated && window.location.hash !== '#/login') {
+      push('/login');
+    }
+  });
 
-  function handleNavigate(page) {
-    currentPage = page;
+  // Route guard - redirect to login if not authenticated
+  function conditionsFailed(event) {
+    if (!auth.isAuthenticated) {
+      push('/login');
+    }
   }
+
+  // Routes definition
+  const routes = {
+    '/': SystemInfo,
+    '/home': SystemInfo,
+    '/stream': Webrtc,
+    '/login': Login,
+    '*': SystemInfo // 404 fallback
+  };
 </script>
 
-<div class="app">
-  <Navigation {currentPage} onNavigate={handleNavigate} />
-  
-  <main>
-    {#if currentPage === 'home'}
-      <SystemInfo />
-    {:else if currentPage === 'cameras'}
-      <Cameras />
-    {:else if currentPage === 'stream'}
-      <div class="page-container">
-        <h2>Camera Stream</h2>
-        <Webrtc cameraId={1} apiUrl="http://localhost:8000" />
-      </div>
-    {/if}
-  </main>
-</div>
+{#if auth.isAuthenticated}
+  <div class="app">
+    <Navigation />
+    
+    <main>
+      <Router {routes} on:conditionsFailed={conditionsFailed} />
+    </main>
+  </div>
+{:else}
+  <Login />
+{/if}
 
 <style>
   .app {

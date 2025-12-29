@@ -1,35 +1,45 @@
 <script>
-  export let currentPage = 'home';
-  export let onNavigate;
+  import { link, location } from 'svelte-spa-router';
+  import { auth } from './auth.svelte.js';
+
+  function handleLogout() {
+    auth.logout();
+  }
+
+  // Check if a route is active
+  function isActive(path) {
+    return $location === path || ($location === '/' && path === '/home');
+  }
 </script>
 
 <nav class="navbar">
   <div class="nav-container">
     <h1 class="logo">🥧 Raspberry Pi Dashboard</h1>
     <div class="nav-links">
-      <button 
+      <a 
+        href="/home"
+        use:link
         class="nav-link" 
-        class:active={currentPage === 'home'}
-        on:click={() => onNavigate('home')}
+        class:active={isActive('/home') || isActive('/')}
       >
         <span class="icon">🏠</span>
         System Info
-      </button>
-      <button 
+      </a>
+      <a 
+        href="/stream"
+        use:link
         class="nav-link" 
-        class:active={currentPage === 'cameras'}
-        on:click={() => onNavigate('cameras')}
-      >
-        <span class="icon">🎥</span>
-        Cameras
-      </button>
-      <button 
-        class="nav-link" 
-        class:active={currentPage === 'stream'}
-        on:click={() => onNavigate('stream')}
+        class:active={isActive('/stream')}
       >
         <span class="icon">📹</span>
         Stream
+      </a>
+      <button 
+        class="nav-link logout"
+        on:click={handleLogout}
+      >
+        <span class="icon">🚪</span>
+        Logout
       </button>
     </div>
   </div>
@@ -74,6 +84,7 @@
     align-items: center;
     gap: 0.5rem;
     transition: all 0.3s ease;
+    text-decoration: none;
   }
 
   .nav-link:hover {
@@ -85,6 +96,10 @@
     background: white;
     color: #667eea;
     border-color: white;
+  }
+
+  .nav-link.logout:hover {
+    background: rgba(255, 100, 100, 0.3);
   }
 
   .icon {
