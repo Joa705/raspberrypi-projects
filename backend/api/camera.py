@@ -7,7 +7,7 @@ import logging
 from database.db import get_db
 import crud.camera as camera_crud
 from modules.camera.controller import camera_controller
-from schemas.camera import CameraCreateRequest, CameraResponse, WebRTCOffer, WebRTCAnswer
+from schemas.camera import CameraCreateRequest, CameraResponse, WebRTCOffer, WebRTCAnswer, CameraWithStatus, CameraRuntimeStatus
 from utilities.auth import get_current_user
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -86,3 +86,44 @@ async def create_camera(camera: CameraCreateRequest, db: AsyncSession = Depends(
         raise HTTPException(status_code=500, detail="Failed to create camera")
     
     return new_camera
+
+@router.get("/statuses", response_model=list[CameraWithStatus])
+async def get_camera_statuses(db: AsyncSession = Depends(get_db)) -> list[CameraWithStatus]:
+    """
+    Get all cameras with their runtime status.
+    
+    Combines static camera configuration from database with runtime status
+    from in-memory camera controller.
+    
+    Args:
+        db: Async database session
+    
+    Returns:
+        List[CameraWithStatus]: Camera configs with runtime status
+    """
+    # Get all cameras from database
+    cameras = await camera_crud.get_cameras(db)
+    
+    results = []
+    for camera in cameras:
+        # Check if camera has an active stream in the controller
+        if camera.camera_id in camera_controller.streams:
+            stream = camera_controller.streams[camera.camera_id]
+            status = stream.get_status()
+        else:
+            # Camera exists in DB but no active stream
+            status = CameraRuntimeStatus(
+                camera_id=camera.camera_id,
+                is_running=False,
+                viewer_count=0,
+                stream_type="webrtc",
+                uptime_seconds=None,
+                peer_connection_count=0
+            )
+        
+        # Combine camera config with status
+        camera_dict = {**camera.__dict__, 'status': status}
+        camera_with_status = CameraWithStatus.model_validate(camera_dict)
+        results.append(camera_with_status)
+    
+    return results
