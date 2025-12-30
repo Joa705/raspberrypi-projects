@@ -7,14 +7,22 @@ from datetime import datetime
 from aiortc.contrib.media import MediaPlayer
 
 # Project imports
-from schemas.camera import CameraStreamConfig, CameraRuntimeStatus
+from schemas.camera import CameraStreamConfig, CameraRuntimeStatus, CameraType
 
 logger = logging.getLogger(__name__)
 
 
 def build_rtsp_url(camera: CameraStreamConfig) -> str:
     """Construct RTSP URL from camera details"""
-    return f"rtsp://{camera.username}:{camera.password}@{camera.ip_address}:554/{camera.stream_quality}"
+    if camera.camera_type == CameraType.TAPO: 
+        tapo_stream_qualites = {"hd": "stream1", "sd": "stream2"}
+        return f"rtsp://{camera.username}:{camera.password}@{camera.ip_address}:554/{tapo_stream_qualites[camera.stream_quality]}"
+    elif camera.camera_type == CameraType.REOLINK:
+        reolink_stream_qualities = {"hd": "h264Preview_01_main", "sd": "h264Preview_01_sub"}
+        return f"rtsp://{camera.username}:{camera.password}@{camera.ip_address}:554/{reolink_stream_qualities[camera.stream_quality]}"
+    
+    # Default generic RTSP URL
+    return f"rtsp://{camera.username}:{camera.password}@{camera.ip_address}:554/live"
 
 
 class CameraStream:
@@ -28,6 +36,7 @@ class CameraStream:
         self.username = camera_config.username
         self.password = camera_config.password
         self.stream_quality = camera_config.stream_quality
+        self.camera_type = camera_config.camera_type
         
         self.rtsp_url = build_rtsp_url(camera_config)
         
@@ -51,33 +60,35 @@ class CameraStream:
         try:
             logger.info(f"Camera {self.camera_id}: Starting stream from {self.rtsp_url}")
             
+            # Use TCP for Reolink cameras, UDP for others
+            transport = 'tcp' if self.camera_type == CameraType.REOLINK else 'udp'
+            
             # MediaPlayer handles FFmpeg internally - much simpler!
             self.media_player = MediaPlayer(
                 self.rtsp_url,
                 format='rtsp',
                 options={
-                    'rtsp_transport': 'udp',
+                    'rtsp_transport': transport,
                     'fflags': 'nobuffer',
                     'flags': 'low_delay',
-                    'probesize': '32',
-                    'analyzeduration': '0',
                     'max_delay': '500000',        # 500ms max delay (microseconds)
-                    'reorder_queue_size': '0',    # Don't reorder packets
-                    'buffer_size': '512000',      # Larger network buffer (512KB)
                 }
             )
             
             # Get video track from MediaPlayer
             self.video_track = self.media_player.video
             
+            if self.video_track is None:
+                raise Exception("No video track available from MediaPlayer")
+            
             self.is_running = True
             self.start_time = time.time()
             
-            logger.info(f"Camera {self.camera_id}: Stream started successfully")
+            logger.info(f"Camera {self.camera_id}: Stream started successfully (transport: {transport})")
             return True
             
         except Exception as e:
-            logger.error(f"Camera {self.camera_id}: Failed to start stream: {e}")
+            logger.error(f"Camera {self.camera_id}: Failed to start stream: {e}", exc_info=True)
             self.media_player = None
             self.video_track = None
             self.is_running = False

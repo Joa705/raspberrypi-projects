@@ -7,16 +7,30 @@ Pydantic models for camera API request/response validation.
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from enum import Enum
 
 
+class CameraType(str, Enum):
+    """Supported camera types/brands"""
+    REOLINK = "reolink"
+    TAPO = "tapo"
+    GENERIC = "generic"
+
+class StreamQuality(str, Enum):
+    """Supported stream quality options"""
+    HD = "hd"
+    SD = "sd"
+    
+    
 class CameraBase(BaseModel):
     """Base camera model with common fields"""
     name: str = Field(..., description="Camera display name", example="Living Room Camera")
     ip_address: str = Field(..., description="Camera IP address", example="10.0.0.24")
     username: str = Field(..., description="Camera authentication username")
     password: str = Field(..., description="Camera authentication password")
-    stream_quality: str = Field(default="stream2", description="Stream quality (stream1=HD, stream2=SD)", example="stream2")
+    stream_quality: StreamQuality = Field(default=StreamQuality.SD, description="Stream quality (HD or SD)", example="SD")
     description: str = Field(default="", description="Camera description", example="Main living room camera")
+    camera_type: CameraType = Field(default=CameraType.REOLINK, description="Type/brand of the camera", example="reolink")
 
 
 class CameraResponse(CameraBase):

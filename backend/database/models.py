@@ -29,6 +29,7 @@ class Camera(Base):
     password = Column(String(100), nullable=False)
     stream_quality = Column(String(20), default="stream2", nullable=False)
     description = Column(Text, default="")
+    camera_type = Column(String(50), default="Reolink", nullable=False)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
