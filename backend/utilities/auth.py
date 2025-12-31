@@ -79,7 +79,6 @@ def _decode_access_token(token: str) -> Optional[int]:
     """Decode JWT token and return user_id. Returns None if invalid."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        logger.info(f"Decoded payload: {payload}")
         
         user_id_str: str = payload.get("sub")
         if user_id_str is None:
@@ -88,7 +87,6 @@ def _decode_access_token(token: str) -> Optional[int]:
         
         # Convert string back to int
         user_id = int(user_id_str)
-        logger.info(f"Extracted user_id: {user_id}")
         return user_id
     except (JWTError, ValueError) as e:
         logger.error(f"JWT decode error: {e}")

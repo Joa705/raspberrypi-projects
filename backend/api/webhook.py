@@ -21,16 +21,12 @@ async def motion_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
     try:
         camera = await camera_crud.get_camera_by_ip(db, camera_ip)
-        
         if not camera:
             return {
                 "status": "error",
                 "message": f"Camera {camera_ip} not registered",
                 "camera_ip": camera_ip
-            }
-        
-        logger.info(f"✓ Camera found: {camera.name} (ID: {camera.camera_id})")
-        
+            }     
     except Exception as e:
         logger.error(f"❌ Database error checking camera: {e}", exc_info=True)
         return {
