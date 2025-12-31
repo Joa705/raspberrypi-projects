@@ -7,6 +7,11 @@ from typing import List, Optional
 from database.models import Camera
 from schemas.camera import CameraBase, CameraUpdate, CameraCreateRequest
 
+async def get_camera_by_ip(db: AsyncSession, ip_address: str) -> Optional[Camera]:
+    """Get a camera by its IP address"""
+    result = await db.execute(select(Camera).where(Camera.ip_address == ip_address))
+    return result.scalar_one_or_none()
+
 
 async def get_camera(db: AsyncSession, camera_id: int) -> Optional[Camera]:
     """Get a camera by ID"""

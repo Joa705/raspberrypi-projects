@@ -13,7 +13,7 @@ import sys
 import psutil
 import time
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 # Project imports
 from config import settings
 from schemas.system import SystemInfo
-from api import camera, user, auth
+from api import camera, user, auth, webhook
 from database.db import init_db
 
 load_dotenv()
@@ -67,6 +67,10 @@ app = FastAPI(
             "name": "Users",
             "description": "User management operations (admin only)",
         },
+        {
+            "name": "Webhooks",
+            "description": "Endpoints for receiving camera webhooks",
+        }
     ]
 )
 
@@ -83,6 +87,7 @@ app.add_middleware(
 app.include_router(camera.router, prefix="/cameras", tags=["Cameras"])
 app.include_router(user.router, prefix="/users", tags=["Users"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
+app.include_router(webhook.router, prefix="/webhook", tags=["Webhooks"])
 
 # Root endpoint
 @app.get("/")
@@ -104,6 +109,7 @@ async def health():
     Health check endpoint for monitoring
     """
     return {"status": "healthy"}
+
 
 
 @app.get("/system-info", response_model=SystemInfo)
